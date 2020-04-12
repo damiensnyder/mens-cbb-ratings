@@ -1,11 +1,8 @@
 ### IMPORTS ###
 
 
-from scrape_util import Scraper
-from concurrent import futures
+from src.scrape_util import Scraper
 from time import sleep
-import datetime
-import sys
 
 ### CONSTANTS ###
 
