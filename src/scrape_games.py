@@ -111,10 +111,41 @@ class RawGame:
             retries_left -= 1
             sleep(CRAWL_DELAY)
 
-
     def parse_box_score(self, soup):
-        pass
+        el_pbp = soup.find('ul', class_='level1').find_all('li')[-5].find('a')
+        pbp_id = int(el_pbp.attrs['href'][-7:])
 
+        # get the location of the game
+        el_metadata_1 = soup.find_all('table', attrs={'width': '50%', 'align': 'center'})[2]
+        metadata_1 = el_metadata_1.get_text().strip().replace("\n", " ")
+
+        # get the list of officials for the game
+        el_officials = soup.find_all('table', attrs={'width': '50%', 'align': 'center'})[3].find_all('td')[1]
+        officials = el_officials.get_text().strip().replace("\n", " ")
+
+        team_names = []
+        game_stat_lines = []
+
+        for el_box in soup.find_all('table', class_='mytable')[-2:]:
+            el_heading = el_box.find('tr', class_='heading')
+            team_name = el_heading.get_text().strip()
+            team_names.append(team_name)
+
+            for el_player in el_box.find_all('tr', class_='smtext'):
+                el_player_id = el_player.find('a')
+                if el_player_id is None:
+                    player_id = ""
+                else:
+                    player_id = int(el_player_id.attrs['href'][-7:])
+                player_stats = [self.box_id, pbp_id, team_name, player_id]
+
+                for el_stat in el_player.find_all('td'):
+                    player_stats.append(el_stat.get_text().strip())
+
+                game_stat_lines.append(player_stats)
+
+        for box_score in game_stat_lines:
+            self.boxes.append(box_score)
 
     def get_pbp(self, retries_left=MAX_RETRIES):
         """Gets play information for the game."""
