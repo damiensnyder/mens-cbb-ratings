@@ -4,6 +4,7 @@
 from src.scrape_util import Scraper
 from time import sleep
 
+
 ### CONSTANTS ###
 
 
