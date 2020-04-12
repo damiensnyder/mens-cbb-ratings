@@ -1,2 +1,2 @@
-# mens-cbb-ratings
-Downloads, parses, and analyzes data concerning men's college basketball to produce ratings and other analysis.
+# mens-basketball-ratings
+ Tools for downloading, cleaning, parsing, and analyzing data from men's basketball games.

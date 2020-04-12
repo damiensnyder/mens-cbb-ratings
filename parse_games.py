@@ -4,14 +4,23 @@
 import csv
 import re
 import MySQLdb
+import datetime
 
 
 ### CONSTANTS ###
 
 
-PATH_OPEN_METADATA = "out/raw_game_metadata.csv"
-PATH_OPEN_BOXES = "out/raw_box_scores.csv"
-PATH_OPEN_PLAYS = "out/raw_plays.csv"
+PATH_OPEN_METADATA = "out/metadata 2018-19.csv"
+PATH_OPEN_BOXES = "out/boxes 2018-19.csv"
+PATH_OPEN_PLAYS = "out/plays 2018-19.csv"
+
+PATH_WRITE_METADATA = "out/games 19.csv"
+PATH_WRITE_BOXES = "out/boxes 19.csv"
+PATH_WRITE_PLAYS = "out/plays 19.csv"
+
+DUMMY_PLAY_STRING = "0,1200,30,0,0,0,\"jump ball\",\"\",\"\",1,0,0,0,\"unrated\",-1,\"unrated\",\"unrated\"," \
+                    "\"unrated\",\"unrated\",\"unrated\",\"unrated\",\"unrated\",\"unrated\",\"unrated\",\"unrated\"," \
+                    "\"unrated\""
 
 DB_HOST = "localhost"
 DB_USERNAME = "damiensn_mcbbP"
@@ -19,13 +28,15 @@ DB_PASSWORD = "A6HbdpQgcIze3KPX"
 DB_DATABASE = "damiensn_mcbb"
 
 SQL_METADATA = "INSERT INTO parsed_metadata (box_id, pbp_id, team_1, team_2, timestamp, location, attendance, ref_1," \
-               "ref_2, ref_3, exhibition_1, exhibition_2) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)" \
-               "ON DUPLICATE KEY UPDATE box_id=box_id"
+               "ref_2, ref_3, exhibition) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON DUPLICATE KEY UPDATE" \
+               "box_id=box_id"
 SQL_PLAYS = "INSERT INTO parsed_plays (play_id, box_id, pbp_id, team_1, team_2, timestamp, period, time, shot_clock," \
             "score_1, score_2, is_team_1, action, flag_1, flag_2, flag_3, flag_4, flag_5, flag_6, player, player_id," \
             "partic_11, partic_12, partic_13, partic_14, partic_15, partic_21, partic_22, partic_23, partic_24," \
             "partic_25) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s," \
             "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON DUPLICATE KEY UPDATE play_id=play_id"
+
+VERBOSE = 2
 
 
 ### CLASSES ###
@@ -35,6 +46,7 @@ class Game:
     """A game accepts metadata, box scores, and play-by-play and parses it into database-uploadable metadata and
     play events.
     """
+
     def __init__(self, plays, boxes, metadata):
         self.plays = plays
         self.boxes = boxes
@@ -60,13 +72,13 @@ class Game:
             try:
                 parsed = parse_play_row(play)
             except ValueError as e:
-                print(f"WARNING: {e}")
+                log(f"WARNING: {e}")
                 parsed = None
 
             if parsed is not None:
                 # if a player does match, get their identity. otherwise, create a new one
                 try:
-                    player_identity = self.identify_player(parsed['player'])
+                    player_identity = self.identify_player(parsed['player'], parsed['is team 1'])
                 except KeyError:
                     player_identity = self.add_fake_player(parsed['player'], parsed['is team 1'])
 
@@ -196,7 +208,14 @@ class Game:
         too few."""
         # some hideous list comprehension that makes dicts of player name -> box minutes for each team
         first_team = self.boxes[0][2]
-        player_list = [[rearrange_comma(player[4]), minutes_to_seconds(player[6]), player[2]] for player in self.boxes]
+        if minutes_to_seconds(self.boxes[0][7]) > minutes_to_seconds(self.boxes[0][6]):
+            player_list = [[rearrange_comma(player[4]),
+                            minutes_to_seconds(player[7]),
+                            player[2]] for player in self.boxes]
+        else:
+            player_list = [[rearrange_comma(player[4]),
+                            minutes_to_seconds(player[6]),
+                            player[2]] for player in self.boxes]
         player_minutes1 = dict([player[0:2] for player in player_list
                                 if (player[0] is not None) and (player[2] == first_team)])
         player_minutes2 = dict([player[0:2] for player in player_list
@@ -214,10 +233,13 @@ class Game:
             last_time = int(play['time'])
             last_period = play['period']
 
-            for player in play['partic1']:
-                player_minutes1[player] -= time_diff
-            for player in play['partic2']:
-                player_minutes2[player] -= time_diff
+            try:
+                for player in play['partic1']:
+                    player_minutes1[player] -= time_diff
+                for player in play['partic2']:
+                    player_minutes2[player] -= time_diff
+            except KeyError:
+                pass
 
         last_time = 1200
         last_period = 0
@@ -249,8 +271,8 @@ class Game:
                     partic1.append(max_player)
                     player_minutes1[max_player] -= time_diff
                 except KeyError:
-                    print(self.boxes)
-                    print(player_minutes1)
+                    log(self.boxes, 0)
+                    log(player_minutes1, 0)
                     exit(2)
 
             # add the players with the most unaccounted minutes to partic2 if there are less than 5
@@ -301,6 +323,44 @@ class Game:
             cursor.execute(SQL_PLAYS, self.play_to_tuple(play, i))
             i += 1
 
+    def write_to_csv(self, file_metadata, file_boxes, file_plays):
+        """Write the parsed plays and metadata to CSV files."""
+        string_metadata = ""
+        for column in self.metadata_to_tuple():
+            if isinstance(column, int):
+                string_metadata += f"{column},"
+            else:
+                string_metadata += f"\"{column}\","
+        file_metadata.write(string_metadata[:-1] + "\n")
+
+        i = 0
+        for box in self.boxes:
+            string_box = ""
+            for column in self.box_to_tuple(box, i):
+                if isinstance(column, int):
+                    string_box += f"{column},"
+                else:
+                    string_box += f"\"{column}\","
+            file_boxes.write(string_box[:-1] + "\n")
+            i += 1
+
+        i = 0
+        for play in self.parsed_plays:
+            if play['action'] not in ["timeout", "substitution"]:
+                string_play = ""
+                for column in self.play_to_tuple(play, i):
+                    if isinstance(column, int):
+                        string_play += f"{column},"
+                    else:
+                        string_play += f"\"{column}\","
+                file_plays.write(string_play[:-1] + "\n")
+                i += 1
+
+        # if there were no plays at all, write two dummy plays to file so things don't break
+        if i == 0:
+            file_plays.write(f"{self.metadata[1]}000,{self.metadata[1]},{DUMMY_PLAY_STRING}\n"
+                             f"{self.metadata[1]}001,{self.metadata[1]},{DUMMY_PLAY_STRING}\n")
+
     def metadata_to_tuple(self):
         """Convert the metadata to something uploadable to the database."""
         index_attendance = self.metadata[4].find("Attendance: ")
@@ -311,13 +371,14 @@ class Game:
             attendance = int(str_attendance.replace(",", ""))
 
         index_timestamp = re.search("[0-1]", self.metadata[4]).start()
-        timestamp = self.metadata[4][index_timestamp:index_timestamp + 19]
+        timestamp = self.metadata[4][index_timestamp:index_timestamp + 19].replace(" TBA     ", "")
 
+        # get the location of the game, if it exists, and replace any quotes in the name with apostrophes
         index_location = self.metadata[4].find("Location: ")
         if index_location == -1:
             location = ""
         else:
-            location = self.metadata[4][index_location + 10:index_attendance].strip()
+            location = self.metadata[4][index_location + 10:index_attendance].strip().replace("\"", "'")
 
         index_ref2 = self.metadata[5].find("   ")
         index_ref3 = self.metadata[5].rfind("   ")
@@ -325,8 +386,43 @@ class Game:
         ref2 = self.metadata[5][index_ref2:index_ref3].strip().replace("  ", " ")
         ref3 = self.metadata[5][index_ref3 + 2:].strip().replace("  ", " ")
 
-        return self.metadata[0], self.metadata[1], self.metadata[2], self.metadata[3], \
-               timestamp, location, attendance, ref1, ref2, ref3, 0, 0
+        # check whether the game was an exhibition game
+        exhibition = 0
+        if " <i>" in self.metadata[2]:
+            exhibition = 1
+            self.metadata[2] = self.metadata[2][:self.metadata[2].index(" <i>")]
+        if " <i>" in self.metadata[3]:
+            exhibition = 1
+            self.metadata[3] = self.metadata[3][:self.metadata[3].index(" <i>")]
+
+        return int(self.metadata[0]), int(self.metadata[1]), self.metadata[2], self.metadata[3], \
+               timestamp, location, attendance, ref1, ref2, ref3, exhibition
+
+    def box_to_tuple(self, box, i):
+        """Convert a row of box score into something uploadable from the database."""
+        # create a unique box ID for the row
+        box_id = int(self.metadata[1]) * 100 + i
+
+        # assign the team a player ID of -2
+        if box[3] == "":
+            box[3] = -2
+
+        # checks if the player plays for the first team listed in the metadata
+        is_team_1 = (box[2] != self.metadata[3]) and (self.metadata[2] in box[2])
+        if not is_team_1 and not (self.metadata[3] in box[2]):
+            log(str(self.metadata), 1)  # log if the team in the box cannot be matched to either team
+
+        # collects all the counting stats into a single tuple
+        box_counting_stats = ()
+        for item in box[8:23]:
+            try:
+                item = int(item)
+            except ValueError:
+                item = 0
+            box_counting_stats += tuple([item])
+
+        return (box_id, int(self.metadata[1]), int(box[3]), box[4], int(is_team_1), minutes_to_seconds(box[7])) + \
+               box_counting_stats
 
     def play_to_tuple(self, play, i):
         """Convert a parsed play into something uploadable to the database."""
@@ -367,14 +463,13 @@ class Game:
         if "player ID" in play:
             player_id = play['player ID']
 
-        return play_id, int(self.metadata[0]), int(self.metadata[1]), self.metadata[2], self.metadata[3], \
-               self.metadata_to_tuple()[4], play['period'], int(play['time']), int(play['shot clock']), \
-               score_1, score_2, int(play['is team 1']), play['action'], flag_1, flag_2, flag_3, flag_4, flag_5, \
-               flag_6, play['player'], player_id, play['partic1'][0], play['partic1'][1], \
+        return play_id, int(self.metadata[1]), play['period'], int(play['time']), int(play['shot clock']), \
+               score_1, score_2, int(play['is team 1']), play['action'], flag_1, flag_2, int(flag_3), int(flag_4), \
+               int(flag_5), int(flag_6), play['player'], player_id, play['partic1'][0], play['partic1'][1], \
                play['partic1'][2], play['partic1'][3], play['partic1'][4], play['partic2'][0], \
                play['partic2'][1], play['partic2'][2], play['partic2'][3], play['partic2'][4]
 
-    def identify_player(self, player):
+    def identify_player(self, player, is_team_1):
         """Given a player name, identifies which player in the box score matches and gets their ID. If no one matches
         well, throws an error so a new "fake" player can be created.
         """
@@ -388,7 +483,8 @@ class Game:
             player_ids = []
             for box in self.boxes:
                 rearranged = rearrange_comma(box[4])
-                if rearranged is not None:
+                # if it is a real name and they are on the right team
+                if (rearranged is not None) and ((box[2] == self.boxes[0][2]) == is_team_1):
                     players.append(rearranged)
                     if box[3] == "":
                         player_ids.append(-1)
@@ -412,14 +508,20 @@ class Game:
 
     def add_fake_player(self, name, is_team_1):
         """Adds a player who should be in the box scores but isn't."""
+        # un-rearrange the comma
         index_space = name.find(" ")
         fake_name = name[index_space + 1:] + ", " + name[0:index_space]
+
+        # create a fake row the size of real rows. (not necessary to add all the extras for now)
         fake_row = [""] * 25
+
+        # put the right team in
         fake_row[0:2] = self.boxes[0][0:2]
         if is_team_1:
             fake_row[2] = self.boxes[0][2]
         else:
-            fake_row[2] = self.boxes[-2][2]
+            fake_row[2] = [row[2] for row in self.boxes if row[2] != self.boxes[0][2]][0]
+
         fake_row[3] = -1
         fake_row[4] = fake_name
         fake_row[6] = "0:00"
@@ -440,19 +542,20 @@ def main():
         reader_plays = csv.reader(file_raw_plays)
         reader_boxes = csv.reader(file_raw_boxes)
         reader_metadata = csv.reader(file_raw_metadata)
-        separate_games(reader_metadata, reader_boxes, reader_plays)
+        log("Separating games.", 1)
+        games = separate_games(reader_metadata, reader_boxes, reader_plays)
+        log("Writing all to CSV.", 1)
+        write_all_to_csv(games)
+        log("Finished writing to CSV.", 1)
 
 
 def separate_games(reader_metadata, reader_boxes, reader_plays):
     """For each game in reader_metadata, find the corresponding box scores and plays and separate them from the rest.
     Then upload it to the database.
     """
-    # connect to the database and get a cursor, so we don't have to do it again for each game
-    db = MySQLdb.connect(DB_HOST, DB_USERNAME, DB_PASSWORD, DB_DATABASE)
-    cursor = db.cursor()
-
     queue_boxes = []
     queue_plays = []
+    games = []
     for row_metadata in reader_metadata:
         box_id = int(row_metadata[0])
         pbp_id = int(row_metadata[1])
@@ -489,10 +592,29 @@ def separate_games(reader_metadata, reader_boxes, reader_plays):
 
         game = Game(current_plays, current_boxes, row_metadata)
         game.parse_game()
-        game.upload_to_db(cursor)
+        games.append(game)
 
+    return games
+
+
+def upload_all_to_db(games):
+    db = MySQLdb.connect(DB_HOST, DB_USERNAME, DB_PASSWORD, DB_DATABASE)
+    cursor = db.cursor()
+    for game in games:
+        game.upload_to_db(cursor)
     db.commit()
     db.close()
+
+
+def write_all_to_csv(games):
+    file_metadata = open(PATH_WRITE_METADATA, 'w')
+    file_boxes = open(PATH_WRITE_BOXES, 'w')
+    file_plays = open(PATH_WRITE_PLAYS, 'w')
+    for game in games:
+        game.write_to_csv(file_metadata, file_boxes, file_plays)
+    file_metadata.close()
+    file_boxes.close()
+    file_plays.close()
 
 
 def rearrange_comma(name):
@@ -507,18 +629,23 @@ def rearrange_comma(name):
 def minutes_to_seconds(minutes):
     """Converts a string like 1:42 to the int 102."""
     index_semicolon = minutes.find(":")
-    if index_semicolon < 1:
+    try:
+        if index_semicolon < 1:
+            return 0
+        else:
+            str_minutes = minutes[:index_semicolon]
+            str_seconds = minutes[index_semicolon + 1:]
+            return 60 * int(str_minutes) + int(str_seconds)
+    except ValueError:
         return 0
-    else:
-        str_minutes = minutes[:index_semicolon]
-        str_seconds = minutes[index_semicolon + 1:]
-        return 60 * int(str_minutes) + int(str_seconds)
 
 
 def similarity_score(str1, str2):
     """Returns the number of 3-character substrings in str1 that occur in str2, and subtract the difference in
             length."""
-    matching_3s = sum(1 for i in range(len(str1) - 2) if str1[i:i + 3].lower() in str2.lower())
+    str1 = str1.lower().replace(".", "")
+    str2 = str2.lower().replace(".", "")
+    matching_3s = sum(1 for i in range(len(str1) - 2) if str1[i:i + 3] in str2)
     diff_length = abs(len(str1) - len(str2))
     return 2 * matching_3s - diff_length
 
@@ -543,6 +670,9 @@ def parse_play_row(row_play):
             parsed_play = parse_semicolon_play(play, notation_info['player'])
         elif notation_info['style'] == "caps":
             parsed_play = parse_caps_play(notation_info['player'], notation_info['rest'])
+
+        if parsed_play is None:
+            return None
 
         # get the score
         if (type(score) == str) & ("-" in score):
@@ -634,9 +764,9 @@ def parse_caps_play(player, rest):
         elif "full" in rest:
             caller = "Team"
             timeout_type = "full"
-        elif rest == "timeout":
+        elif (rest == "timeout") or (rest == "team timeout"):
             caller = "Team"
-            timeout_type = None
+            timeout_type = "unknown"
         else:
             raise ValueError(f"Unrecognized timeout type: '{rest}'")
 
@@ -724,33 +854,36 @@ def parse_caps_play(player, rest):
             'blocked': None
         }
 
-    # errors
+    # if it can't be solved, try parsing it as a semicolon play
     else:
-        raise ValueError(f"Unrecognized play type: '{rest}'.")
+        return parse_semicolon_play(rest, player)
 
 
 def parse_semicolon_play(play, player):
     """Parses a play in the 'semicolon' notation style."""
     # starts of periods
     if ("period start" in play) | ("game start" in play):
-        return {
-            'player': "Floor",
-            'action': "period start"
-        }
+        return None
+        # return {
+        #     'player': "Floor",
+        #     'action': "period start"
+        # }
 
     # jump ball thrown
     elif "jumpball startperiod" in play:
-        return {
-            'player': "Floor",
-            'action': "jump ball thrown"
-        }
+        return None
+        # return {
+        #     'player': "Floor",
+        #     'action': "jump ball thrown"
+        # }
 
     # ends of periods
     elif ("period end" in play) | ("game end" in play):
-        return {
-            'player': "Floor",
-            'action': "period end"
-        }
+        return None
+        # return {
+        #     'player': "Floor",
+        #     'action': "period end"
+        # }
 
     # jump balls
     elif (", jumpball" in play) & ((" won" in play) | (" lost" in play)):
@@ -842,6 +975,10 @@ def parse_semicolon_play(play, player):
             foul_type = "administrative admin technical"
         elif "technical contactdeadball" in play:
             foul_type = "deadball contact technical"
+        elif "adminTechnical benchclassb" in play:
+            foul_type = "bench admin technical, class B"
+        elif "coachTechnical double" in play:
+            foul_type = "double coach technical"
         else:
             raise ValueError(f"unrecognized foul type: '{play}'")
 
@@ -978,7 +1115,7 @@ def parse_semicolon_play(play, player):
         blocked = "blocked" in play
 
         if " jumpshot " in play:
-            shot_type = "alley-oop"
+            shot_type = "jump shot"
         elif " pullupjumpshot " in play:
             shot_type = "pull-up jump shot"
         elif " turnaroundjumpshot " in play:
@@ -1025,20 +1162,30 @@ def get_notation_style(play):
     play = play.replace("UNKNOWN", "")
     index_comma1 = play.find(",")
     index_comma2 = play.find(", ")
-    index_first_lower = play.index(re.findall("[a-z]|[0-9]", play)[0])
-    if index_first_lower > 7:
+    try:
+        index_first_lower = play.index(re.findall("[a-z]|[0-9]", play)[0])
+    except IndexError:
+        index_first_lower = 7
+    if index_first_lower > 6:
         notation_style = "caps"
         index_name_end = play[:index_first_lower].rfind(" ") + 1
         player = (play[index_comma1 + 1:index_name_end] + play[0:index_comma1]).title()
         rest = play[index_name_end:].lower()
-    elif play[0:4] == "TEAM":
+    elif (play[0:4] == "TEAM") or (play[0:4] == "null") or (play[0:4] == "team"):
         notation_style = "caps"
         player = "Team"
-        play = play.replace("  ", " ")
+        while "  " in play:
+            play = play.replace("  ", " ")
         index_name_end = 5
         if "Team" in play:
             index_name_end = play.index("Team") + 5
         rest = play[index_name_end:].lower()
+    elif (play[0:3] == "TM ") or ((play[0] >= "0") and (play[0] <= "9") and (play[1] >= "0") and (play[2] <= "9")):
+        notation_style = "caps"
+        player = "Team"
+        while "  " in play:
+            play = play.replace("  ", " ")
+        rest = play[3:].lower()
     elif (index_comma2 > 0) | (index_comma1 < 0):
         notation_style = "semicolon"
         player = play[0:index_comma2]
@@ -1051,6 +1198,11 @@ def get_notation_style(play):
         'player': player,
         'rest': rest
     }
+
+
+def log(message, verbosity=2):
+    if verbosity < VERBOSE:
+        print(datetime.datetime.strftime(datetime.datetime.now(), "%H:%M:%S: ") + message)
 
 
 ### ACTUAL STUFF ###

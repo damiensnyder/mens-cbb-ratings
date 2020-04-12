@@ -49,11 +49,14 @@ class RawGame:
         self.boxes = []
         self.pbp = []
 
-    def get_box_score(self, retries_left=MAX_RETRIES):
+    def get_box_score(self, retries_left=MAX_RETRIES, by_pbp=False):
         """Gets box score information for the game, then calls for the other thing to get the play-by-play."""
         while retries_left > 0:
             # open the page
-            url = f"http://stats.ncaa.org/contests/{self.box_id}/box_score"
+            if by_pbp:
+                url = f"http://stats.ncaa.org/game/box_score/{self.box_id}"
+            else:
+                url = f"http://stats.ncaa.org/contests/{self.box_id}/box_score"
             soup = self.scraper.open_page(url=url)
 
             # inexplicably, sometimes the soup will not return anything despite existing
@@ -63,8 +66,8 @@ class RawGame:
 
             try:
                 # get the play-by-play ID for the game
-                el_pbp = soup.find('ul', class_='level1').find_all('li')[1].find('a')
-                pbp_id = int(el_pbp.attrs['href'][16:-12])
+                el_pbp = soup.find('ul', class_='level1').find_all('li')[-5].find('a')
+                pbp_id = int(el_pbp.attrs['href'][-7:])
 
                 # get the location of the game
                 el_metadata_1 = soup.find_all('table', attrs={'width': '50%', 'align': 'center'})[2]
@@ -294,9 +297,38 @@ def get_day(scraper, month, day, year, code, retries_left=MAX_RETRIES):
     return box_ids
 
 
+def get_specifics(box_ids, by_pbp=False):
+    scraper = Scraper(thread_count=DEFAULT_THREAD_COUNT, verbose=VERBOSE)
+
+    # open the files we're going to write to
+    file_metadata = open(PATH_METADATA, 'w')
+    file_boxes = open(PATH_BOXES, 'w')
+    file_pbp = open(PATH_PBP, 'w')
+
+    # get all the box IDs from the day
+    scraper.log(f"Started parsing.", 0)
+    raw_games = [RawGame(scraper, box_id) for box_id in box_ids]
+    sleep(CRAWL_DELAY)
+
+    # get the box and write to file for each game
+    for raw_game in raw_games:
+        raw_game.get_box_score(by_pbp=by_pbp)
+        raw_game.write_to_file(file_metadata, file_boxes, file_pbp)
+        sleep(CRAWL_DELAY)
+
+    scraper.log(f"Finished writing to file.", 0)
+
+    # close the files
+    file_metadata.close()
+    file_boxes.close()
+    file_pbp.close()
+    scraper.log("Finished scraping all days in range.", 0)
+
+
 ### ACTUAL STUFF ###
 
 
 if __name__ == '__main__':
-    # main([2018, 11, 6, 2018, 12, 1])
-    main(sys.argv[1:])
+    # main([2017, 10, 30, 2018, 4, 7])
+    # main(sys.argv[1:])
+    get_specifics([4655893, 4657243, 4662221, 4669299, 4669980, 4675929, 4748501], by_pbp=True)

@@ -1,0 +1,10 @@
+
+*.rtf
+*.txt
+*.numbers
+*.csv
+out
+prep
+__pycache__
+cbr
+.DS_Store
