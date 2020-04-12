@@ -17,11 +17,13 @@ class TestTimeout:
         self.test_timeout_error()
         self.test_cancel()
 
+    @pytest.mark.slow
     def test_timeout_error(self):
         with pytest.raises(TimeoutError):
             t = src.scrape_util.Timeout(1)
             time.sleep(1)
 
+    @pytest.mark.slow
     def test_cancel(self):
         t = src.scrape_util.Timeout(1)
         t.cancel()
