@@ -111,6 +111,11 @@ class RawGame:
             retries_left -= 1
             sleep(CRAWL_DELAY)
 
+
+    def parse_box_score(self, soup):
+        pass
+
+
     def get_pbp(self, retries_left=MAX_RETRIES):
         """Gets play information for the game."""
         pbp_id = self.metadata[1]
