@@ -199,7 +199,7 @@ def get_all_teams(season):
     file_metadata = open(PATH_METADATA, 'w')
     file_players = open(PATH_PLAYERS, 'w')
 
-    # get numbers relating to the current year
+    # get the season and attendance code of the current season
     season_code = [division['code'] for division in YEAR_DIVISIONS if division['year'] == season][0]
     attendance_code = [division['attendance'] for division in YEAR_DIVISIONS if division['year'] == season][0]
 

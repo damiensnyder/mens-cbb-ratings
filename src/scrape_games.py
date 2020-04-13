@@ -71,9 +71,9 @@ class RawGame:
                 el_metadata_1 = soup.find_all('table', attrs={'width': '50%', 'align': 'center'})[2]
                 metadata_1 = el_metadata_1.get_text().strip().replace("\n", " ")
 
-                # get the list of officials for the game
-                el_officials = soup.find_all('table', attrs={'width': '50%', 'align': 'center'})[3].find_all('td')[1]
-                officials = el_officials.get_text().strip().replace("\n", " ")
+                # get the list of referees for the game
+                el_referees = soup.find_all('table', attrs={'width': '50%', 'align': 'center'})[3].find_all('td')[1]
+                referees = el_referees.get_text().strip().replace("\n", " ")
 
                 team_names = []
                 game_stat_lines = []
@@ -99,7 +99,7 @@ class RawGame:
                 self.scraper.log(f"Finished parsing box score. (Box ID: {self.box_id})", 2)
                 for box_score in game_stat_lines:
                     self.boxes.append(box_score)
-                self.metadata = [self.box_id, pbp_id, team_names[0], team_names[1], metadata_1, officials]
+                self.metadata = [self.box_id, pbp_id, team_names[0], team_names[1], metadata_1, referees]
                 retries_left = 0
                 self.get_pbp()
             except AttributeError as e:
@@ -112,16 +112,14 @@ class RawGame:
             sleep(CRAWL_DELAY)
 
     def parse_box_score(self, soup):
-        el_pbp = soup.find('ul', class_='level1').find_all('li')[-5].find('a')
-        pbp_id = int(el_pbp.attrs['href'][-7:])
+        pbp_id = find_pbp_id(soup)
 
         # get the location of the game
         el_metadata_1 = soup.find_all('table', attrs={'width': '50%', 'align': 'center'})[2]
         metadata_1 = el_metadata_1.get_text().strip().replace("\n", " ")
 
-        # get the list of officials for the game
-        el_officials = soup.find_all('table', attrs={'width': '50%', 'align': 'center'})[3].find_all('td')[1]
-        officials = el_officials.get_text().strip().replace("\n", " ")
+        # get the list of referees for the game
+        referees = find_referees(soup)
 
         team_names = []
         game_stat_lines = []
@@ -357,6 +355,26 @@ def get_specifics(box_ids, by_pbp=False):
     file_boxes.close()
     file_pbp.close()
     scraper.log("Finished scraping all days in range.", 0)
+
+
+def find_pbp_id(soup):
+    """Given a box score page, find the PBP ID of the game."""
+    el_pbp = soup.find('ul', class_='level1').find_all('li')[-5].find('a')
+    return int(el_pbp.attrs['href'][-7:])
+
+
+def find_referees(soup):
+    el_referees = soup.find_all('table', attrs={'width': '50%', 'align': 'center'})[3].find_all('td')[1]
+    referees_text = el_referees.get_text().strip()
+    if referees_text.count("\n") == 4:
+        index_first_newline = referees_text.find("\n")
+        index_last_newline = referees_text.rfind("\n")
+        referee1 = referees_text[:index_first_newline].strip()
+        referee2 = referees_text[index_first_newline:index_last_newline].strip()
+        referee3 = referees_text[index_last_newline:].strip()
+        return [referee1, referee2, referee3]
+    else:
+        return [None] * 3
 
 
 ### ACTUAL STUFF ###
