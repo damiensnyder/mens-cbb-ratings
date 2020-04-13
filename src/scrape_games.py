@@ -27,10 +27,6 @@ YEAR_DIVISIONS = [
     {'year': 2020, 'code': 17060}
 ]
 
-PATH_METADATA = "out/raw_game_metadata.csv"
-PATH_BOXES = "out/raw_box_scores.csv"
-PATH_PBP = "out/raw_plays.csv"
-
 
 ### CLASSES ###
 
@@ -113,12 +109,9 @@ class RawGame:
 
     def parse_box_score(self, soup):
         pbp_id = find_pbp_id(soup)
-
-        # get the location of the game
-        el_metadata_1 = soup.find_all('table', attrs={'width': '50%', 'align': 'center'})[2]
-        metadata_1 = el_metadata_1.get_text().strip().replace("\n", " ")
-
-        # get the list of referees for the game
+        game_time = find_game_time(soup)
+        location = find_location(soup)
+        attendance = find_attendance(soup)
         referees = find_referees(soup)
 
         team_names = []
@@ -181,69 +174,8 @@ class RawGame:
                     self.scraper.log(f"Done retrying. (PBP ID: {pbp_id})", 1)
             sleep(CRAWL_DELAY)
 
-    def write_to_file(self, file_metadata, file_boxes, file_pbp):
-        """Write all the info from this game to the given files."""
-        # write the metadata to file
-        while len(self.metadata) < 6:
-            self.metadata.append("")
-        str_metadata = f"{self.metadata[0]}," \
-                       f"{self.metadata[1]}," \
-                       f"\"{self.metadata[2]}\"," \
-                       f"\"{self.metadata[3]}\"," \
-                       f"\"{self.metadata[4]}\"," \
-                       f"\"{self.metadata[5]}\"\n"
-        file_metadata.write(str_metadata)
-        self.scraper.log(str_metadata[:-1])
-
-        # write the box score to file
-        for box in self.boxes:
-            while len(box) < 7:
-                box.append("")
-
-            str_box = f"{box[0]}," \
-                      f"{box[1]}," \
-                      f"\"{box[2]}\"," \
-                      f"{box[3]}," \
-                      f"\"{box[4]}\"," \
-                      f"\"{box[5]}\"," \
-                      f"\"{box[6]}\""
-
-            # every item after the first 7 is the same
-            for box_item in box[7:]:
-                str_box += f",{box_item}"
-
-            str_box += "\n"
-            file_boxes.write(str_box)
-            self.scraper.log(str_box[:-1], 5)
-
-        # write the play-by-play to file
-        for play in self.pbp:
-            while len(play) < 6:
-                play.append("")
-            str_play = f"{play[0]}," \
-                       f"{play[1]}," \
-                       f"\"{play[2]}\"," \
-                       f"\"{play[3]}\"," \
-                       f"\"{play[4]}\"," \
-                       f"\"{play[5]}\"\n"
-            file_pbp.write(str_play)
-            self.scraper.log(str_play[:-1], 5)
-
-        file_metadata.flush()
-        file_boxes.flush()
-        file_pbp.flush()
-
 
 ### FUNCTIONS ###
-
-
-def main(argv):
-    if len(argv) == 6:
-        get_range(int(argv[0]), int(argv[1]), int(argv[2]), int(argv[3]), int(argv[4]), int(argv[5]))
-    else:
-        today = datetime.datetime.today()
-        yesterday = today - datetime.timedelta(1)
-        get_range(yesterday.year, yesterday.month, yesterday.day, today.year, today.month, today.day)
 
 
 def get_range(start_year, start_month, start_day, end_year, end_month, end_day):
@@ -259,11 +191,6 @@ def get_range(start_year, start_month, start_day, end_year, end_month, end_day):
     if start_month > 6:
         season += 1
     season_code = [division['code'] for division in YEAR_DIVISIONS if division['year'] == season][0]
-
-    # open the files we're going to write to
-    file_metadata = open(PATH_METADATA, 'w')
-    file_boxes = open(PATH_BOXES, 'w')
-    file_pbp = open(PATH_PBP, 'w')
 
     # iterate through each day in the date range
     while start_date < end_date:
@@ -283,15 +210,10 @@ def get_range(start_year, start_month, start_day, end_year, end_month, end_day):
         # get the box and write to file for each game
         for raw_game in raw_games:
             raw_game.get_box_score()
-            raw_game.write_to_file(file_metadata, file_boxes, file_pbp)
             sleep(CRAWL_DELAY)
 
         scraper.log(f"Finished writing to file. (Date: {month}/{day}/{year})", 0)
 
-    # close the files
-    file_metadata.close()
-    file_boxes.close()
-    file_pbp.close()
     scraper.log("Finished scraping all days in range.", 0)
 
 
@@ -332,11 +254,6 @@ def get_day(scraper, month, day, year, code, retries_left=MAX_RETRIES):
 def get_specifics(box_ids, by_pbp=False):
     scraper = Scraper(thread_count=DEFAULT_THREAD_COUNT, verbose=VERBOSE)
 
-    # open the files we're going to write to
-    file_metadata = open(PATH_METADATA, 'w')
-    file_boxes = open(PATH_BOXES, 'w')
-    file_pbp = open(PATH_PBP, 'w')
-
     # get all the box IDs from the day
     scraper.log(f"Started parsing.", 0)
     raw_games = [RawGame(scraper, box_id) for box_id in box_ids]
@@ -345,15 +262,9 @@ def get_specifics(box_ids, by_pbp=False):
     # get the box and write to file for each game
     for raw_game in raw_games:
         raw_game.get_box_score(by_pbp=by_pbp)
-        raw_game.write_to_file(file_metadata, file_boxes, file_pbp)
         sleep(CRAWL_DELAY)
 
     scraper.log(f"Finished writing to file.", 0)
-
-    # close the files
-    file_metadata.close()
-    file_boxes.close()
-    file_pbp.close()
     scraper.log("Finished scraping all days in range.", 0)
 
 
@@ -363,7 +274,50 @@ def find_pbp_id(soup):
     return int(el_pbp.attrs['href'][-7:])
 
 
+def find_game_time(soup):
+    """Given a box score page, find the start time of the game."""
+    el_metadata = soup.find_all('table', attrs={'width': '50%', 'align': 'center'})[2]
+    el_game_date = el_metadata.find('tr').find_all('td')[1]
+    raw_date_text = el_game_date.get_text().strip()
+
+    # some dates have TBA instead of a specific time. does not return a time for those dates
+    if 'M' in raw_date_text:
+        as_date = datetime.datetime.strptime(raw_date_text, '%m/%d/%Y %I:%M %p')
+        return as_date.strftime('%Y/%m/%d %H:%M')
+    else:
+        index_space = raw_date_text.index(' ')
+        as_date = datetime.datetime.strptime(raw_date_text[:index_space], '%m/%d/%Y')
+        return as_date.strftime('%Y/%m/%d')
+
+
+def find_location(soup):
+    """Given a box score page, find the location of the game, if it is listed. If it is not
+    listed, return None."""
+    el_metadata = soup.find_all('table', attrs={'width': '50%', 'align': 'center'})[2]
+
+    # location is not listed for all games
+    if 'Location:' in el_metadata.get_text():
+        el_location = el_metadata.find_all('tr')[1].find_all('td')[1]
+        return el_location.get_text().strip()
+    else:
+        return None
+
+
+def find_attendance(soup):
+    """Given a box score page, find the attendance of the game."""
+    el_metadata = soup.find_all('table', attrs={'width': '50%', 'align': 'center'})[2]
+
+    # location appears above attendance in games where it is listed, but it is not listed for all
+    # games
+    if 'Location:' in el_metadata.get_text():
+        el_attendance = el_metadata.find_all('tr')[2].find_all('td')[1]
+    else:
+        el_attendance = el_metadata.find_all('tr')[1].find_all('td')[1]
+    return int(el_attendance.get_text().strip().replace(',', ''))
+
+
 def find_referees(soup):
+    """Given a box score page, find the referees if they are listed."""
     el_referees = soup.find_all('table', attrs={'width': '50%', 'align': 'center'})[3].find_all('td')[1]
     referees_text = el_referees.get_text().strip()
     if referees_text.count("\n") == 4:
@@ -375,6 +329,15 @@ def find_referees(soup):
         return [referee1, referee2, referee3]
     else:
         return [None] * 3
+
+
+def main(argv):
+    if len(argv) == 6:
+        get_range(int(argv[0]), int(argv[1]), int(argv[2]), int(argv[3]), int(argv[4]), int(argv[5]))
+    else:
+        today = datetime.datetime.today()
+        yesterday = today - datetime.timedelta(1)
+        get_range(yesterday.year, yesterday.month, yesterday.day, today.year, today.month, today.day)
 
 
 ### ACTUAL STUFF ###
