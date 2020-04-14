@@ -113,30 +113,7 @@ class RawGame:
         location = find_location(soup)
         attendance = find_attendance(soup)
         referees = find_referees(soup)
-
-        team_names = []
-        game_stat_lines = []
-
-        for el_box in soup.find_all('table', class_='mytable')[-2:]:
-            el_heading = el_box.find('tr', class_='heading')
-            team_name = el_heading.get_text().strip()
-            team_names.append(team_name)
-
-            for el_player in el_box.find_all('tr', class_='smtext'):
-                el_player_id = el_player.find('a')
-                if el_player_id is None:
-                    player_id = ""
-                else:
-                    player_id = int(el_player_id.attrs['href'][-7:])
-                player_stats = [self.box_id, pbp_id, team_name, player_id]
-
-                for el_stat in el_player.find_all('td'):
-                    player_stats.append(el_stat.get_text().strip())
-
-                game_stat_lines.append(player_stats)
-
-        for box_score in game_stat_lines:
-            self.boxes.append(box_score)
+        self.boxes = find_raw_boxes(soup)
 
     def get_pbp(self, retries_left=MAX_RETRIES):
         """Gets play information for the game."""
@@ -329,6 +306,39 @@ def find_referees(soup):
         return [referee1, referee2, referee3]
     else:
         return [None] * 3
+
+
+def find_raw_boxes(soup):
+    """Given a box score page, find the box scores and return them raw. Returns them in a list in the format:
+    [NCAA player id (as int),
+    True if away or False if home,
+    name in the format 'Last, First' (suffixes are inconsistent),
+    position (e.g. 'G') -- sometimes not listed,
+    games played (nearly always '1' -- can safely be discarded),
+    duration played (e.g. '6:04'),
+    'FGM', 'FGA', '3PM', '3PA', 'FTM', 'FTA', 'PTS', 'ORB', 'DRB', 'TRB', 'AST', 'TOV', 'STL', 'BLK', 'PF', 'DQ']"""
+    is_away = True
+    boxes = []
+
+    # each team's box scores are in a different table, so use that to infer which team each player
+    # is on
+    for el_team in soup.find_all('table', class_='mytable')[-2:]:
+        for el_box in el_team.find_all('tr', class_='smtext'):
+            el_player_id = el_box.find('a')
+            if el_player_id is None:
+                player_id = None
+            else:
+                player_id = int(el_player_id.attrs['href'][-7:])
+            box = [player_id, is_away]
+
+            for el_stat in el_box.find_all('td'):
+                box.append(el_stat.get_text().strip())
+
+            boxes.append(box)
+
+        is_away = False     # the first table of boxes is away, so set the next one to home
+
+    return boxes
 
 
 def main(argv):
