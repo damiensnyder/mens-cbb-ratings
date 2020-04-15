@@ -346,7 +346,11 @@ def find_raw_boxes(soup):
     return boxes
 
 
-# TODO: Make it ignore empty boxes.
+# Below are functions dedicated to cleaning values found by the raw box score parsing functions,
+# specifically parsing the actual box scores themselves and not the game metadata.
+
+
+# TODO: Make it ignore empty boxes and team sum boxes.
 def clean_raw_boxes(raw_boxes, home_roster, away_roster):
     boxes = []
     for raw_box in raw_boxes:
@@ -354,23 +358,29 @@ def clean_raw_boxes(raw_boxes, home_roster, away_roster):
             boxes.append(clean_single_box(raw_box, away_roster))
         else:
             boxes.append(clean_single_box(raw_box, home_roster))
+    return boxes
 
 
-# TODO: Documentation.
 def clean_single_box(raw_box, roster):
-    box = dict()
+    """Take a single raw stat line in a box score and transform it into a dict with usably clean
+    values."""
+    box = {
+        'is away': raw_box[1]
+    }
 
-    box['is away'] = raw_box[1]
+    # since teams do not have player IDs, positions, or playtime, collect those only for actual
+    # players and merely record that the team stats come from "Team"
     if raw_box[2].strip().lower() == "team":
         box['name'] = "Team"
     else:
-        player = identify_player(raw_box[0], clean_name(raw_box[2]))
+        player = identify_player(raw_box[0], clean_name(raw_box[2]), roster)
         box['player ID'] = player['player ID']
         box['name'] = player['name']
         position = clean_position(raw_box[3])
         if position is not None:
             raw_box['position'] = position
         box['time played'] = clean_time(raw_box[5])
+
     box['FGM'] = clean_stat(raw_box[6])
     box['FGA'] = clean_stat(raw_box[7])
     box['3PM'] = clean_stat(raw_box[8])
@@ -416,9 +426,21 @@ def clean_position(raw_position):
     return None
 
 
-# TODO: The entire function.
 def clean_time(raw_time):
-    return raw_time
+    """Converts a string representing a duration in minutes and seconds to the number of total
+    seconds. For example, clean_time('1:42') would return 102. If the value passed in is not a
+    string or is not in M:SS format, returns 0."""
+    if isinstance(raw_time, str):
+        index_colon = raw_time.find(':')
+        try:
+            if index_colon > 0:
+                str_minutes = raw_time[:index_colon]
+                str_seconds = raw_time[index_colon + 1:]
+                return 60 * int(str_minutes) + int(str_seconds)
+        except ValueError:
+            return 0    # this is dangerous, might change later
+
+    return 0
 
 
 # TODO: Documentation.
