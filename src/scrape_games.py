@@ -245,6 +245,11 @@ def get_specifics(box_ids, by_pbp=False):
     scraper.log("Finished scraping all days in range.", 0)
 
 
+# Below are functions dedicated to extracting information from BeautifulSoup representations of box
+# score webpages scraped from stats.ncaa.org. These functions do little or no pre-processing of the
+# values extracted.
+
+
 def find_pbp_id(soup):
     """Given a box score page, find the PBP ID of the game."""
     el_pbp = soup.find('ul', class_='level1').find_all('li')[-5].find('a')
@@ -339,6 +344,89 @@ def find_raw_boxes(soup):
         is_away = False     # the first table of boxes is away, so set the next one to home
 
     return boxes
+
+
+# TODO: Make it ignore empty boxes.
+def clean_raw_boxes(raw_boxes, home_roster, away_roster):
+    boxes = []
+    for raw_box in raw_boxes:
+        if raw_box[1]:
+            boxes.append(clean_single_box(raw_box, away_roster))
+        else:
+            boxes.append(clean_single_box(raw_box, home_roster))
+
+
+# TODO: Documentation.
+def clean_single_box(raw_box, roster):
+    box = dict()
+
+    box['is away'] = raw_box[1]
+    if raw_box[2].strip().lower() == "team":
+        box['name'] = "Team"
+    else:
+        player = identify_player(raw_box[0], clean_name(raw_box[2]))
+        box['player ID'] = player['player ID']
+        box['name'] = player['name']
+        position = clean_position(raw_box[3])
+        if position is not None:
+            raw_box['position'] = position
+        box['time played'] = clean_time(raw_box[5])
+    box['FGM'] = clean_stat(raw_box[6])
+    box['FGA'] = clean_stat(raw_box[7])
+    box['3PM'] = clean_stat(raw_box[8])
+    box['3PA'] = clean_stat(raw_box[9])
+    box['FTM'] = clean_stat(raw_box[10])
+    box['FTA'] = clean_stat(raw_box[11])
+    box['ORB'] = clean_stat(raw_box[13])
+    box['DRB'] = clean_stat(raw_box[14])
+    box['AST'] = clean_stat(raw_box[16])
+    box['TOV'] = clean_stat(raw_box[17])
+    box['STL'] = clean_stat(raw_box[18])
+    box['BLK'] = clean_stat(raw_box[19])
+    box['PF'] = clean_stat(raw_box[20])
+
+    return raw_box
+
+
+# TODO: The entire function.
+def clean_name(name):
+    return name
+
+
+# TODO: The entire function.
+def identify_player(player_id, name, roster):
+    return {
+        'player_id': player_id,
+        'name': name
+    }
+
+
+def clean_position(raw_position):
+    """Given a string (or other value) possibly representing a player's position, return 'G' if
+    they are a guard, 'F' if they are a forward, 'C' if they are a center, and None otherwise."""
+    if isinstance(raw_position, str):
+        raw_position = raw_position.lower()
+        if "g" in raw_position:
+            return "G"
+        elif "f" in raw_position:
+            return "F"
+        elif "c" in raw_position:
+            return "C"
+
+    return None
+
+
+# TODO: The entire function.
+def clean_time(raw_time):
+    return raw_time
+
+
+# TODO: Documentation.
+def clean_stat(raw_stat):
+    try:
+        return int(raw_stat)
+    except ValueError:
+        return 0
 
 
 def main(argv):

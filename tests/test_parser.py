@@ -41,7 +41,8 @@ correct_box_values = {
 }
 
 
-### FUNCTIONS ###
+# Below are functions that test the functions intended to gather raw information from BeautifulSoup
+# objects representing stats.ncaa.org box score webpages.
 
 
 def test_find_pbp_id(soup, correct_pbp_id):
@@ -65,7 +66,12 @@ def test_find_referees(soup, correct_referees):
 
 
 def test_find_raw_boxes(soup, correct_raw_box_1):
-    assert src.scrape_games.find_raw_boxes(soup)[0] == correct_raw_box_1
+    given_raw_box_1 = src.scrape_games.find_raw_boxes(soup)[0]
+    assert given_raw_box_1 == correct_raw_box_1
+    return given_raw_box_1
+
+
+# TODO: Write test cases for data cleaning functions.
 
 
 def main():
