@@ -1,12 +1,6 @@
-### IMPORTS ###
-
-
 from src.scrape_util import Scraper
 from time import sleep
 import datetime
-
-
-### CONSTANTS ###
 
 
 CRAWL_DELAY = 1
@@ -28,7 +22,7 @@ YEAR_DIVISIONS = [
 ]
 
 
-### CLASSES ###
+# Functions for scraping game information from stats.ncaa.org. Going to be entirely rewritten.
 
 
 class RawGame:
@@ -150,9 +144,6 @@ class RawGame:
                 if retries_left <= 0:
                     self.scraper.log(f"Done retrying. (PBP ID: {pbp_id})", 1)
             sleep(CRAWL_DELAY)
-
-
-### FUNCTIONS ###
 
 
 def get_range(start_year, start_month, start_day, end_year, end_month, end_day):
@@ -350,11 +341,12 @@ def find_raw_boxes(soup):
 # specifically parsing the actual box scores themselves and not the game metadata.
 
 
-# TODO: Make it ignore empty boxes and team sum boxes.
 def clean_raw_boxes(raw_boxes, home_roster, away_roster):
+    """Given raw box scores and the rosters of the two teams playing, create pre-processed box
+    scores as dicts."""
     boxes = []
     for raw_box in raw_boxes:
-        if raw_box[1]:
+        if raw_box[1]:  # select roster based on whether player is home or away
             boxes.append(clean_single_box(raw_box, away_roster))
         else:
             boxes.append(clean_single_box(raw_box, home_roster))
@@ -438,7 +430,7 @@ def identify_player(player_id, name, roster):
                 most_similar = player
                 break
             else:
-                similarity = name_similarity(name, player[1])
+                similarity = score_name_similarity(name, player[1])
                 if similarity > highest_similarity:
                     highest_similarity = similarity
                     most_similar = player
@@ -490,7 +482,7 @@ def clean_stat(raw_stat):
         return 0
 
 
-def name_similarity(name1, name2):
+def score_name_similarity(name1, name2):
     """Evaluate the similarity of two names. Similarity is measured as twice number of matching
     3-character sequences (ignoring punctuation and case) minus absolute difference in length."""
     name1 = name1.lower().replace('.', '')
@@ -504,6 +496,9 @@ def name_similarity(name1, name2):
     return similarity
 
 
+# Main method. Going to be entirely rewritten.
+
+
 def main(argv):
     if len(argv) == 6:
         get_range(int(argv[0]), int(argv[1]), int(argv[2]), int(argv[3]), int(argv[4]), int(argv[5]))
@@ -511,9 +506,6 @@ def main(argv):
         today = datetime.datetime.today()
         yesterday = today - datetime.timedelta(1)
         get_range(yesterday.year, yesterday.month, yesterday.day, today.year, today.month, today.day)
-
-
-### ACTUAL STUFF ###
 
 
 if __name__ == '__main__':
