@@ -398,17 +398,55 @@ def clean_single_box(raw_box, roster):
     return raw_box
 
 
-# TODO: The entire function.
 def clean_name(name):
-    return name
+    """Rearrange the given name from 'Last, First' to 'First Last'. Also accepts names without the
+    space after the comma. If there is no comma, returns the name as is. Names with extra commas
+    like 'Last, Jr., First' rearrange to 'First Last, Jr.'"""
+    index_last_comma = name.rfind(',')
+    if (index_last_comma > 0) and (index_last_comma < len(name) - 1):
+        if name[index_last_comma + 1] == " ":
+            return name[index_last_comma + 1:] + name[:index_last_comma]
+        else:
+            return name[index_last_comma + 1:] + name[:index_last_comma]
+    else:
+        return name
 
 
-# TODO: The entire function.
 def identify_player(player_id, name, roster):
-    return {
-        'player_id': player_id,
-        'name': name
-    }
+    """Given the name and player ID of a player, and the roster of the team they play on, identify
+    the player. Look for an exact match, otherwise choose the player with the most similar name. If
+    no matching or even similar player can be found, return a player with the given name and a
+    player ID of None."""
+    # if the player plays on a non-D1 team (thus having no associated roster), do not try to
+    # identify them
+    if roster is None:
+        return {
+            'player ID': None,
+            'name': name
+        }
+    else:
+        highest_similarity = 3  # discard any matches with a lower similarity than 3
+        most_similar = {
+            'player ID': None,
+            'name': name
+        }
+
+        # if there is an exactly matching name or player ID, return that player, or otherwise
+        # choose the player with the most similar name
+        for player in roster:
+            if (player_id == player[0]) or (name == player[1]):
+                most_similar = player
+                break
+            else:
+                similarity = name_similarity(name, player[1])
+                if similarity > highest_similarity:
+                    highest_similarity = similarity
+                    most_similar = player
+
+        return {
+            'player ID': most_similar[0],
+            'name': most_similar[1]
+        }
 
 
 def clean_position(raw_position):
@@ -443,12 +481,27 @@ def clean_time(raw_time):
     return 0
 
 
-# TODO: Documentation.
 def clean_stat(raw_stat):
+    """Convert the given stat from str to int. If an int value cannot be determined, return 0
+    instead."""
     try:
         return int(raw_stat)
     except ValueError:
         return 0
+
+
+def name_similarity(name1, name2):
+    """Evaluate the similarity of two names. Similarity is measured as twice number of matching
+    3-character sequences (ignoring punctuation and case) minus absolute difference in length."""
+    name1 = name1.lower().replace('.', '')
+    name2 = name2.lower().replace('.', '')
+
+    similarity = -abs(len(name1) - len(name2))
+    for i in range(len(name1) - 3):
+        if name1[i:i + 3] in name2:
+            similarity += 2
+
+    return similarity
 
 
 def main(argv):
