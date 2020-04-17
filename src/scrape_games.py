@@ -2,7 +2,6 @@ from src.scrape_util import Scraper
 from time import sleep
 import datetime
 
-
 CRAWL_DELAY = 1
 VERBOSE = 3
 MAX_RETRIES = 15
@@ -462,13 +461,13 @@ def clean_time(raw_time):
     string or is not in M:SS format, returns 0."""
     if isinstance(raw_time, str):
         index_colon = raw_time.find(':')
-        try:
-            if index_colon > 0:
+        if index_colon > 0:
+            try:
                 str_minutes = raw_time[:index_colon]
                 str_seconds = raw_time[index_colon + 1:]
                 return 60 * int(str_minutes) + int(str_seconds)
-        except ValueError:
-            return 0    # this is dangerous, might change later
+            except ValueError:
+                return 0    # this is dangerous, might change later
 
     return 0
 

@@ -1,14 +1,5 @@
-### IMPORTS ###
-
-
-# import pytest
-import src.scrape_games
-import src.scrape_rosters
+import src.scrape_games as sg
 from bs4 import BeautifulSoup as bs
-
-
-### CONSTANTS ###
-
 
 correct_box_values = {
     1602674: {
@@ -46,35 +37,58 @@ correct_box_values = {
 
 
 def test_find_pbp_id(soup, correct_pbp_id):
-    assert src.scrape_games.find_pbp_id(soup) == correct_pbp_id
+    assert sg.find_pbp_id(soup) == correct_pbp_id
 
 
 def test_find_game_time(soup, correct_game_time):
-    assert src.scrape_games.find_game_time(soup) == correct_game_time
+    assert sg.find_game_time(soup) == correct_game_time
 
 
 def test_find_location(soup, correct_location):
-    assert src.scrape_games.find_location(soup) == correct_location
+    assert sg.find_location(soup) == correct_location
 
 
 def test_find_attendance(soup, correct_attendance):
-    assert src.scrape_games.find_attendance(soup) == correct_attendance
+    assert sg.find_attendance(soup) == correct_attendance
 
 
 def test_find_referees(soup, correct_referees):
-    assert src.scrape_games.find_referees(soup) == correct_referees
+    assert sg.find_referees(soup) == correct_referees
 
 
 def test_find_raw_boxes(soup, correct_raw_box_1):
-    given_raw_box_1 = src.scrape_games.find_raw_boxes(soup)[0]
+    given_raw_box_1 = sg.find_raw_boxes(soup)[0]
     assert given_raw_box_1 == correct_raw_box_1
     return given_raw_box_1
 
 
-# TODO: Write test cases for data cleaning functions.
+# Below are functions that test the functions used to clean the raw data extracted from NCAA
+# webpages.
+
+
+def test_clean_name():
+    pass
+
+
+def test_clean_time():
+    """Tests relevant edge cases of the function for parsing duration strings."""
+    assert sg.clean_time("") == 0
+    assert sg.clean_time(" ") == 0
+    assert sg.clean_time(" : ") == 0
+    assert sg.clean_time(" 1:01") == 61
+    assert sg.clean_time("10:13") == 613
+    assert sg.clean_time("1:01") == 61
+    assert sg.clean_time("1:16 ") == 76
+    assert sg.clean_time("0:59") == 59
+    assert sg.clean_time("0:09") == 9
+    assert sg.clean_time("0:00") == 0
+    assert sg.clean_time("00:02") == 2
+    assert sg.clean_time("--") == 0
 
 
 def main():
+    test_clean_time()
+
     for box_id in correct_box_values:
         with open(f'webpages/box_{box_id}.html', 'r') as file:
             soup = bs(file, 'html.parser')
