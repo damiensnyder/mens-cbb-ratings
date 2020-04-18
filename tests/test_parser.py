@@ -74,6 +74,22 @@ def test_clean_name():
     assert sg.clean_name("Last, Jr.,First") == "First Last, Jr."
 
 
+def test_clean_position():
+    """Tests relevant cases of clean_position."""
+    assert sg.clean_position("G") == "G"
+    assert sg.clean_position("F") == "F"
+    assert sg.clean_position("C") == "C"
+    assert sg.clean_position("g") == "G"
+    assert sg.clean_position("f") == "F"
+    assert sg.clean_position("c") == "C"
+    assert sg.clean_position(" G") == "G"
+    assert sg.clean_position("F ") == "F"
+    assert sg.clean_position("Center") == "C"
+    assert sg.clean_position("*") is None
+    assert sg.clean_position("") is None
+    assert sg.clean_position(" ") is None
+
+
 def test_clean_time():
     """Tests relevant edge cases of the function for parsing duration strings."""
     assert sg.clean_time("") == 0
@@ -90,9 +106,21 @@ def test_clean_time():
     assert sg.clean_time("--") == 0
 
 
+def test_clean_stat():
+    """Tests relevant edge cases of clean_stat."""
+    assert sg.clean_stat("") == 0
+    assert sg.clean_stat(" ") == 0
+    assert sg.clean_stat("2 ") == 2
+    assert sg.clean_stat("2") == 2
+    assert sg.clean_stat(" 2") == 2
+    assert sg.clean_stat("23") == 23
+
+
 def main():
     test_clean_name()
+    test_clean_position()
     test_clean_time()
+    test_clean_stat()
 
     for box_id in correct_box_values:
         with open(f'webpages/box_{box_id}.html', 'r') as file:
