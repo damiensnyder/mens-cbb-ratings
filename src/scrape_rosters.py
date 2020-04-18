@@ -279,6 +279,34 @@ def get_specifics(team_ids, season, by_school_id=False):
     scraper.log("Finished scraping all teams.", 0)
 
 
+# Below are functions for uploading files to the database.
+
+
+def upload_school(cursor, school_id, school_name, mascot, stadium, capacity):
+    cursor.execute(
+        f"""INSERT INTO schools (school_id, school_name, mascot, stadium, capacity)
+            VALUES (`{school_id}`, `{school_name}`, `{mascot}`, `{stadium}`, `{capacity}`);"""
+    )
+
+
+def upload_team_season(cursor, team_season_id, school_id, season_year, coach_name, coach_id):
+    cursor.execute(
+        f"""INSERT INTO team_seasons (team_season_id, school_id, season_year, coach_name, coach_id)
+            VALUES (`{team_season_id}`, `{school_id}`, `{season_year}`, `{coach_name}`,
+                                        `{coach_id}`);"""
+    )
+
+
+def upload_player_season(cursor, team_season_id, player_id, season_year, player_name,
+                         eligibility_year, position, height, jersey_number):
+    cursor.execute(
+        f"""INSERT INTO player_seasons (team_season_id, player_id, season_year, player_name,
+                                        eligibility_year, position, height, jersey_number)
+            VALUES ('{team_season_id}', '{player_id}', '{season_year}', '{player_name}',
+                    '{eligibility_year}', '{position}', '{height}', '{jersey_number}');"""
+    )
+
+
 ### ACTUAL STUFF ###
 
 
