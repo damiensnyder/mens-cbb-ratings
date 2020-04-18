@@ -67,7 +67,11 @@ def test_find_raw_boxes(soup, correct_raw_box_1):
 
 
 def test_clean_name():
-    pass
+    """Tests relevant cases of clean_name."""
+    assert sg.clean_name("Last, First") == "First Last"
+    assert sg.clean_name("Last, Jr., First") == "First Last, Jr."
+    assert sg.clean_name("Last,First") == "First Last"
+    assert sg.clean_name("Last, Jr.,First") == "First Last, Jr."
 
 
 def test_clean_time():
@@ -87,6 +91,7 @@ def test_clean_time():
 
 
 def main():
+    test_clean_name()
     test_clean_time()
 
     for box_id in correct_box_values:

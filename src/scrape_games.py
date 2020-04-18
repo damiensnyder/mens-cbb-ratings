@@ -396,9 +396,9 @@ def clean_name(name):
     index_last_comma = name.rfind(',')
     if (index_last_comma > 0) and (index_last_comma < len(name) - 1):
         if name[index_last_comma + 1] == " ":
-            return name[index_last_comma + 1:] + name[:index_last_comma]
+            return name[index_last_comma + 2:] + " " + name[:index_last_comma]
         else:
-            return name[index_last_comma + 1:] + name[:index_last_comma]
+            return name[index_last_comma + 1:] + " " + name[:index_last_comma]
     else:
         return name
 
