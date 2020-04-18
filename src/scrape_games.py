@@ -495,7 +495,7 @@ def score_name_similarity(name1, name2):
     return similarity
 
 
-# Main method. Going to be entirely rewritten.
+# Main method. Going to be entirely rewritten eventually.
 
 
 def main(argv):

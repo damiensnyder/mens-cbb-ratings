@@ -10,3 +10,4 @@ cbr
 .DS_Store
 .idea
 *.html
+src/rosters_to_db.py
