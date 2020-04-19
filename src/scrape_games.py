@@ -530,6 +530,28 @@ def upload_game(cursor, game_id, h_team_season_id, a_team_season_id, h_name, a_n
     )
 
 
+def upload_box(cursor, game_id, box_in_game, player_id, player_name, is_away, seconds_played,
+               fgm, fga, tpm, tpa, ftm, fta, orb, drb, ast, tov, stl, blk, pf):
+    """Assert that fields that are required not to be null in the database are not null, and
+    replace any other null fields with the string 'NULL'. Except I'm not bothering with the ints
+    yet."""
+    assert (game_id is not None) and (box_in_game is not None)
+    if player_id is None:
+        player_id = "NULL"
+    if player_name is None:
+        player_name = "NULL"
+    if is_away is None:
+        is_away = "NULL"
+
+    cursor.execute(
+        f"""INSERT INTO games (game_id, box_in_game, player_id, player_name, is_away,
+                               start_time, location, attendance, referees, is_exhibition)
+            VALUES (`{game_id}`, `{box_in_game}`, `{player_id}`, `{player_name}`, `{is_away}`,
+                    `{seconds_played}`, `{fgm}`, `{fga}`, `{tpm}`, `{tpa}`,  `{ftm}`, `{fta}`,
+                    `{orb}`, `{drb}`, `{ast}`, `{tov}`, `{stl}`, `{blk}`, `{pf}`);"""
+    )
+
+
 # Main method. Going to be entirely rewritten eventually.
 
 
