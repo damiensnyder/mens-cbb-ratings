@@ -1,6 +1,7 @@
 from src.scrape_util import Scraper
 from time import sleep
 import datetime
+import re
 
 CRAWL_DELAY = 1
 VERBOSE = 3
@@ -461,11 +462,11 @@ def clean_time(raw_time):
     seconds. For example, clean_time('1:42') would return 102. If the value passed in is not a
     string or is not in M:SS format, returns 0."""
     if isinstance(raw_time, str):
-        index_colon = raw_time.find(':')
-        if index_colon > 0:
+        index_first_colon = raw_time.find(':')
+        if index_first_colon > 0:
             try:
-                str_minutes = raw_time[:index_colon]
-                str_seconds = raw_time[index_colon + 1:]
+                str_minutes = raw_time[:index_first_colon]
+                str_seconds = raw_time[index_first_colon + 1:]
                 return 60 * int(str_minutes) + int(str_seconds)
             except ValueError:
                 return 0  # this is dangerous, might change later
@@ -602,6 +603,549 @@ def upload_play(cursor, game_id, play_in_game, period, time_remaining, shot_cloc
                     `{players[3]}`, `{players[4]}`, `{players[5]}`, `{players[6]}`, `{players[7]}`,
                     `{players[8]}`, `{players[9]}`);"""
     )
+
+
+# Below are functions for parsing a play from the play-by-play logs.
+
+
+def parse_play_row(play_row):
+    """Put all the information in the row into a dict that contains parsed play information."""
+    play_1 = play_row[3]
+    play_2 = play_row[5]
+    score = play_row[4]
+
+    # if there was an actual play:
+    if (score != "Score") and ((len(play_1) > 0) or (len(play_2) > 0)):
+        # check which team did the play
+        if len(play_1) > 0:
+            parsed_play = parse_play(play_1)
+            is_away = True
+        else:
+            parsed_play = parse_play(play_2)
+            is_away = False
+
+        if parsed_play is None:
+            return None
+
+        scores = clean_score(score)
+        parsed_play['away score'] = scores[0]
+        parsed_play['home score'] = scores[1]
+        parsed_play['time'] = clean_centi_time(play_row[2])
+
+        # get other information from the row
+        parsed_play['game ID'] = play_row[0]
+        parsed_play['period'] = int(play_row[1])
+        parsed_play['is away'] = is_away
+
+        return parsed_play
+    
+
+def parse_play(play):
+    """Parse only the text of the play and return as a dict."""
+    notation_info = get_notation_style(play)
+    if notation_info['style'] == 'semicolon':
+        return parse_semicolon_play(play, notation_info['player'])
+    elif notation_info['style'] == 'caps':
+        return parse_caps_play(notation_info['player'], notation_info['rest'])
+
+
+def clean_centi_time(raw_time):
+    """Clean times in the format MM:SS.cc or MM:SS to a number of seconds."""
+    minutes = int(raw_time[0:2])
+    seconds = int(raw_time[3:5])
+    if len(raw_time) > 5:
+        centiseconds = int(raw_time[6:9])
+    else:
+        centiseconds = 0
+    return 60 * minutes + seconds + 0.01 * centiseconds
+
+
+def clean_score(score):
+    """Given the entry of a score in a play-by-play in a format like '41-39', return the scores in
+    a format like (41, 39)."""
+    if (type(score) == str) and ("-" in score):
+        return int(score[:score.index("-")]), int(score[score.index("-") + 1:])
+    else:
+        return [None] * 2
+
+
+def parse_caps_play(player, rest):
+    """Parses a play in the 'caps' notation style."""
+    if "blocked shot" in rest:                      # blocks
+        return {
+            'player': player,
+            'action': "block"
+        }
+    elif " rebound" in rest:                        # rebounds
+        return parse_caps_rebound(player, rest)
+    elif "turnover" in rest:                        # turnovers
+        return {
+            'player': player,
+            'action': "turnover"
+        }
+    elif "steal" in rest:                           # steals
+        return {
+            'player': player,
+            'action': "steal"
+        }
+    elif "timeout" in rest:                         # timeouts
+        return parse_caps_timeout(rest)
+    elif "assist" in rest:                          # assists
+        return {
+            'player': player,
+            'action': "assist"
+        }
+    elif "commits foul" in rest:                    # fouls committed
+        return {
+            'player': player,
+            'action': "foul committed"
+        }
+    elif " game" in rest:                           # substitutions
+        return {
+            'player': player,
+            'action': "substitution",
+            'in': "enters" in rest
+        }
+    elif "free throw" in rest:                      # free throws
+        return {
+            'player': player,
+            'action': "free throw",
+            'success': "made" in rest,
+            'number': None,
+            'out of': None
+        }
+    elif ("missed " in rest) or ("made " in rest):  # shots
+        return parse_caps_shot(player, rest)
+    else:   # if no play type found, try parsing as a semicolon play
+        return parse_semicolon_play(rest, player)
+
+
+def parse_caps_rebound(player, rest):
+    """Parses a play in caps format involving a rebound."""
+    if "offensive" in rest:
+        was_offensive = True
+        rebound_type = "live"
+    elif "defensive" in rest:
+        was_offensive = False
+        rebound_type = "live"
+    elif "deadball" in rest:
+        was_offensive = None
+        rebound_type = "dead ball"
+    else:
+        raise ValueError(f"Unrecognized rebound type: '{rest}'")
+
+    return {
+            'player': player,
+            'action': "rebound",
+            'offensive': was_offensive,
+            'type': rebound_type
+        }
+
+
+def parse_caps_timeout(rest):
+    """Parses a play in caps format involving a timeout."""
+    if "media" in rest:
+        caller = "Floor"
+        timeout_type = "media"
+    elif "20" in rest:
+        caller = "Team"
+        timeout_type = "short"
+    elif "30" in rest:
+        caller = "Team"
+        timeout_type = "full"
+    elif "short" in rest:
+        caller = "Team"
+        timeout_type = "short"
+    elif "full" in rest:
+        caller = "Team"
+        timeout_type = "full"
+    elif (rest == "timeout") or (rest == "team timeout"):
+        caller = "Team"
+        timeout_type = "unknown"
+    else:
+        raise ValueError(f"Unrecognized timeout type: '{rest}'")
+
+    return {
+        'player': caller,
+        'action': "timeout",
+        'type': timeout_type
+    }
+
+
+def parse_caps_shot(player, rest):
+    """Parses a play in caps format involving a field goal attempt."""
+    if " three point" in rest:
+        shot_length = "3"
+    elif " jumper" in rest:
+        shot_length = "long 2"
+    else:
+        shot_length = "short 2"
+
+    second_chance = None
+
+    if " layup" in rest:
+        shot_type = "layup"
+    elif " jumper" in rest:
+        shot_type = "jump shot"
+    elif " tip in" in rest:
+        shot_type = "layup"
+        second_chance = True
+    elif " dunk" in rest:
+        shot_type = "dunk"
+    else:
+        raise ValueError(f"Unrecognized shot type '{rest}'.")
+
+    return {
+        'player': player,
+        'action': "shot",
+        'success': " made " in rest,
+        'length': shot_length,
+        'type': shot_type,
+        'second chance': second_chance,
+        'fast break': None,
+        'blocked': None
+    }
+
+
+def parse_semicolon_play(play, player):
+    """Parses a play in the 'semicolon' notation style."""
+    # starts of periods
+    if ("period start" in play) | ("game start" in play):
+        return None
+        # return {
+        #     'player': "Floor",
+        #     'action': "period start"
+        # }
+
+    # jump ball thrown
+    elif "jumpball startperiod" in play:
+        return None
+        # return {
+        #     'player': "Floor",
+        #     'action': "jump ball thrown"
+        # }
+
+    # ends of periods
+    elif ("period end" in play) | ("game end" in play):
+        return None
+        # return {
+        #     'player': "Floor",
+        #     'action': "period end"
+        # }
+
+    # jump balls
+    elif (", jumpball" in play) & ((" won" in play) | (" lost" in play)):
+        jumpball_result = " won" in play
+
+        return {
+            'player': player,
+            'action': "jump ball",
+            'success': jumpball_result
+        }
+
+    # substitutions
+    elif ", substitution" in play:
+        subbed_in = " in" in play
+
+        return {
+            'player': player,
+            'action': "substitution",
+            'in': subbed_in
+        }
+
+    # possession arrow events
+    elif "Team, jumpball" in play:
+        if " heldball" in play:
+            jumpball_type = "held ball"
+        elif " blocktieup" in play:
+            jumpball_type = "block tie-up"
+        elif " lodgedball" in play:
+            jumpball_type = "lodged ball"
+        elif " outofbounds" in play:
+            jumpball_type = "out of bounds"
+        else:
+            raise ValueError(f"Unknown jump ball type: '{play}'")
+
+        return {
+            'player': "Team",
+            'action': "possession arrow",
+            'type': jumpball_type
+        }
+
+    # timeouts
+    elif "timeout " in play:
+        if " commercial" in play:
+            caller = "Floor"
+            timeout_type = "media"
+        elif " full" in play:
+            caller = "Team"
+            timeout_type = "full"
+        elif " short" in play:
+            caller = "Team"
+            timeout_type = "short"
+        else:
+            raise ValueError(f"Unrecognized timeout type: '{play}'")
+
+        return {
+            'player': caller,
+            'action': "timeout",
+            'type': timeout_type
+        }
+
+    # fouls received
+    elif ", foulon" in play:
+        return {
+            'player': player,
+            'action': "foul received"
+        }
+
+    # fouls committed
+    elif ", foul" in play:
+        if " personal" in play:
+            foul_type = "personal"
+        elif " offensive" in play:
+            foul_type = "offensive"
+        elif "benchTechnical classa" in play:
+            foul_type = "bench technical, class A"
+        elif "adminTechnical classb" in play:
+            foul_type = "admin technical, class B"
+        elif "technical classa" in play:
+            foul_type = "technical, class A"
+        elif "technical flagrant2" in play:
+            foul_type = "technical, flagrant 2"
+        elif "coachTechnical classa" in play:
+            foul_type = "coach technical, class A"
+        elif "technical double" in play:
+            foul_type = "double technical"
+        elif "adminTechnical coachclassb" in play:
+            foul_type = "coach admin technical, class B"
+        elif "adminTechnical administrative" in play:
+            foul_type = "administrative admin technical"
+        elif "technical contactdeadball" in play:
+            foul_type = "deadball contact technical"
+        elif "adminTechnical benchclassb" in play:
+            foul_type = "bench admin technical, class B"
+        elif "coachTechnical double" in play:
+            foul_type = "double coach technical"
+        else:
+            raise ValueError(f"unrecognized foul type: '{play}'")
+
+        return {
+            'player': player,
+            'action': "foul committed",
+            'type': foul_type
+        }
+
+    # blocks
+    elif ", block" in play:
+        return {
+            'player': player,
+            'action': "block"
+        }
+
+    # assists
+    elif ", assist" in play:
+        return {
+            'player': player,
+            'action': "assist"
+        }
+
+    # steals
+    elif ", steal" in play:
+        return {
+            'player': player,
+            'action': "steal"
+        }
+
+    # turnovers
+    elif ", turnover" in play:
+        if " travel" in play:
+            turnover_type = "travel"
+        elif " badpass" in play:
+            turnover_type = "bad pass"
+        elif " lostball" in play:
+            turnover_type = "lost ball"
+        elif " offensive" in play:
+            turnover_type = "offensive foul"
+        elif " 3sec" in play:
+            turnover_type = "3-second violation"
+        elif " shotclock" in play:
+            turnover_type = "shot clock violation"
+        elif " dribbling" in play:
+            turnover_type = "double dribble"
+        elif " 5sec" in play:
+            turnover_type = "5-second violation"
+        elif " 10sec" in play:
+            turnover_type = "10-second violation"
+        elif " laneviolation" in play:
+            turnover_type = "lane violation"
+        elif " other" in play:
+            turnover_type = "other"
+        else:
+            raise ValueError(f"unrecognized turnover type: '{play}'")
+
+        return {
+            'player': player,
+            'action': "turnover",
+            'type': turnover_type
+        }
+
+    # rebounds
+    elif " rebound" in play:
+        if " offensive" in play:
+            was_offensive = True
+        elif " defensive" in play:
+            was_offensive = False
+        else:
+            raise ValueError(f"unrecognized rebound type: '{play}'")
+
+        if "deadball" in play:
+            rebound_type = "deadball"
+        else:
+            rebound_type = "live"
+
+        return {
+            'player': player,
+            'action': "rebound",
+            'offensive': was_offensive,
+            'type': rebound_type
+        }
+
+    # 2-point field goal attempts
+    elif ", 2pt" in play:
+        if "pointsinthepaint" in play:
+            shot_length = "short 2"
+        else:
+            shot_length = "long 2"
+
+        shot_made = " made" in play
+        second_chance = "2ndchance" in play
+        fast_break = "fastbreak" in play
+        blocked = "blocked" in play
+
+        if " jumpshot " in play:
+            shot_type = "jump shot"
+        elif " pullupjumpshot " in play:
+            shot_type = "pull-up jump shot"
+        elif " stepbackjumpshot " in play:
+            shot_type = "step-back jump shot"
+        elif " turnaroundjumpshot " in play:
+            shot_type = "turn-around jump shot"
+        elif " hookshot " in play:
+            shot_type = "hook shot"
+        elif " layup " in play:
+            shot_type = "layup"
+        elif " dunk " in play:
+            shot_type = "dunk"
+        elif " drivinglayup " in play:
+            shot_type = "driving layup"
+        elif " alleyoop " in play:
+            shot_type = "alley-oop"
+        else:
+            raise ValueError(f"unrecognized shot type: '{play}'")
+
+        return {
+            'player': player,
+            'action': "shot",
+            'success': shot_made,
+            'length': shot_length,
+            'type': shot_type,
+            'second chance': second_chance,
+            'fast break': fast_break,
+            'blocked': blocked
+        }
+
+    # 3-point field goal attempts
+    elif ", 3pt" in play:
+        shot_made = " made" in play
+        second_chance = "2ndchance" in play
+        fast_break = "fastbreak" in play
+        blocked = "blocked" in play
+
+        if " jumpshot " in play:
+            shot_type = "jump shot"
+        elif " pullupjumpshot " in play:
+            shot_type = "pull-up jump shot"
+        elif " turnaroundjumpshot " in play:
+            shot_type = "turn-around jump shot"
+        elif " stepbackjumpshot " in play:
+            shot_type = "step-back jump shot"
+        else:
+            raise ValueError(f"unrecognized shot type: '{play}'")
+
+        return {
+            'player': player,
+            'action': "shot",
+            'success': shot_made,
+            'length': "3",
+            'type': shot_type,
+            'second chance': second_chance,
+            'fast break': fast_break,
+            'blocked': blocked
+        }
+
+    # free throw attempts
+    elif ", freethrow" in play:
+        shot_made = " made" in play
+
+        index_ft = play.index(", freethrow")
+        shot_number = int(play[index_ft + 12])
+        shot_out_of = int(play[index_ft + 15])
+
+        return {
+            'player': player,
+            'action': "free throw",
+            'success': shot_made,
+            'number': shot_number,
+            'out of': shot_out_of
+        }
+
+    # errors
+    else:
+        raise ValueError(f"Unrecognized play type: '{play}'")
+
+
+def get_notation_style(play):
+    """Detect the notation style and separates the name of the player from the rest of the play."""
+    play = play.replace("UNKNOWN", "")
+    index_comma1 = play.find(",")
+    index_comma2 = play.find(", ")
+    try:
+        index_first_lower = play.index(re.findall("[a-z]|[0-9]", play)[0])
+    except IndexError:
+        index_first_lower = 7
+    if index_first_lower > 6:
+        notation_style = "caps"
+        index_name_end = play[:index_first_lower].rfind(" ") + 1
+        player = (play[index_comma1 + 1:index_name_end] + play[0:index_comma1]).title()
+        rest = play[index_name_end:].lower()
+    elif (play[0:4] == "TEAM") or (play[0:4] == "null") or (play[0:4] == "team"):
+        notation_style = "caps"
+        player = "Team"
+        while "  " in play:
+            play = play.replace("  ", " ")
+        index_name_end = 5
+        if "Team" in play:
+            index_name_end = play.index("Team") + 5
+        rest = play[index_name_end:].lower()
+    elif (play[0:3] == "TM ") or ((play[0] >= "0") and (play[0] <= "9") and (play[1] >= "0") and (play[2] <= "9")):
+        notation_style = "caps"
+        player = "Team"
+        while "  " in play:
+            play = play.replace("  ", " ")
+        rest = play[3:].lower()
+    elif (index_comma2 > 0) | (index_comma1 < 0):
+        notation_style = "semicolon"
+        player = play[0:index_comma2]
+        rest = play[index_comma2:]
+    else:
+        raise ValueError(f"Unrecognized notation style: '{play}'")
+
+    return {
+        'style': notation_style,
+        'player': player,
+        'rest': rest
+    }
 
 
 # Main method. Going to be entirely rewritten eventually.
