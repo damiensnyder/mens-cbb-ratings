@@ -29,6 +29,7 @@ class RawGame:
     with the given scraper. This is to prevent feeding a list in every time we want to scrape a page, and it keeps
     the sets of information scraped for each game together.
     """
+
     def __init__(self, scraper, box_id):
         self.scraper = scraper
         self.box_id = box_id
@@ -331,7 +332,7 @@ def find_raw_boxes(soup):
 
             boxes.append(box)
 
-        is_away = False     # the first table of boxes is away, so set the next one to home
+        is_away = False  # the first table of boxes is away, so set the next one to home
 
     return boxes
 
@@ -467,7 +468,7 @@ def clean_time(raw_time):
                 str_seconds = raw_time[index_colon + 1:]
                 return 60 * int(str_minutes) + int(str_seconds)
             except ValueError:
-                return 0    # this is dangerous, might change later
+                return 0  # this is dangerous, might change later
 
     return 0
 
@@ -516,7 +517,7 @@ def upload_game(cursor, game_id, h_team_season_id, a_team_season_id, h_name, a_n
     if referees is None:
         referees = ["NULL"] * 3
     referees = [referee for referee in referees if referee is not None]
-    while len(referees) < 3:    # in case there fewer than 3 non-null referees
+    while len(referees) < 3:  # in case there fewer than 3 non-null referees
         referees.append("NULL")
     if is_exhibition is None:
         is_exhibition = "NULL"
@@ -544,11 +545,62 @@ def upload_box(cursor, game_id, box_in_game, player_id, player_name, is_away, se
         is_away = "NULL"
 
     cursor.execute(
-        f"""INSERT INTO games (game_id, box_in_game, player_id, player_name, is_away,
+        f"""INSERT INTO boxes (game_id, box_in_game, player_id, player_name, is_away,
                                start_time, location, attendance, referees, is_exhibition)
             VALUES (`{game_id}`, `{box_in_game}`, `{player_id}`, `{player_name}`, `{is_away}`,
                     `{seconds_played}`, `{fgm}`, `{fga}`, `{tpm}`, `{tpa}`,  `{ftm}`, `{fta}`,
                     `{orb}`, `{drb}`, `{ast}`, `{tov}`, `{stl}`, `{blk}`, `{pf}`);"""
+    )
+
+
+def upload_play(cursor, game_id, play_in_game, period, time_remaining, shot_clock, h_score, a_score,
+                agent_is_away, action, flags, agent_id, agent_name, players):
+    """Assert that fields that are required not to be null in the database are not null, and
+    replace any other null fields with the string 'NULL'. Except I'm not bothering with the ints
+    yet."""
+    assert (game_id is not None) and (play_in_game is not None)
+    assert (agent_is_away is not None) and (action is not None)
+
+    if period is None:
+        period = "NULL"
+    if time_remaining is None:
+        period = "NULL"
+    if shot_clock is None:
+        period = "NULL"
+    if h_score is None:
+        period = "NULL"
+    if a_score is None:
+        period = "NULL"
+    if agent_is_away is None:
+        period = "NULL"
+    if action is None:
+        period = "NULL"
+    if agent_name is None:
+        period = "NULL"
+    if agent_id is None:
+        period = "NULL"
+    if flags is None:
+        flags = ["NULL"] * 6
+    null_flags = [i for i in range(len(flags)) if flags[i] is None]
+    for i in null_flags:
+        flags[i] = "NULL"
+    if players is None:
+        players = ["NULL"] * 10
+    null_players = [i for i in range(len(players)) if players[i] is None]
+    for i in null_players:
+        players[i] = "NULL"
+
+    cursor.execute(
+        f"""INSERT INTO plays (game_id, play_in_game, period, time_remaining, shot_clock, h_score,
+                               a_score, agent_is_away, action, flag1, flag2, flag3, flag4, flag5,
+                               flag6, agent_id, agent_name, h_p1, h_p2, h_p3, h_p4, h_p5, a_p1,
+                               a_p2, a_p3, a_p4, a_p5)
+            VALUES (`{game_id}`, `{play_in_game}`, `{period}`, `{time_remaining}`, `{shot_clock}`,
+                    `{h_score}`, `{a_score}`, `{agent_is_away}`, `{action}`, `{flags[0]}`,
+                    `{flags[1]}`, `{flags[2]}`, `{flags[3]}`, `{flags[4]}`, `{flags[5]}`,
+                    `{agent_id}`, `{agent_name}`, `{players[0]}`, `{players[1]}`, `{players[2]}`,
+                    `{players[3]}`, `{players[4]}`, `{players[5]}`, `{players[6]}`, `{players[7]}`,
+                    `{players[8]}`, `{players[9]}`);"""
     )
 
 
