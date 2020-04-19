@@ -495,6 +495,41 @@ def score_name_similarity(name1, name2):
     return similarity
 
 
+# Below are functions for uploading files to the database.
+
+
+def upload_game(cursor, game_id, h_team_season_id, a_team_season_id, h_name, a_name, start_time,
+                location, attendance, referees, is_exhibition):
+    """Assert that fields that are required not to be null in the database are not null, and
+    replace any other null fields with the string 'NULL'."""
+    assert (game_id is not None) and (h_name is not None) and (a_name is not None)
+    if h_team_season_id is None:
+        h_team_season_id = "NULL"
+    if a_team_season_id is None:
+        a_team_season_id = "NULL"
+    if start_time is None:
+        start_time = "NULL"
+    if location is None:
+        location = "NULL"
+    if attendance is None:
+        attendance = "NULL"
+    if referees is None:
+        referees = ["NULL"] * 3
+    referees = [referee for referee in referees if referee is not None]
+    while len(referees) < 3:    # in case there fewer than 3 non-null referees
+        referees.append("NULL")
+    if is_exhibition is None:
+        is_exhibition = "NULL"
+
+    cursor.execute(
+        f"""INSERT INTO games (game_id, h_team_season_id, a_team_season_id, h_name, a_name,
+                               start_time, location, attendance, referees, is_exhibition)
+            VALUES (`{game_id}`, `{h_team_season_id}`, `{a_team_season_id}`, `{h_name}`,
+                    `{a_name}`, `{start_time}`, `{location}`, `{attendance}`, `{referees[0]}`,
+                    `{referees[1]}`, `{referees[2]}`, `{is_exhibition}`);"""
+    )
+
+
 # Main method. Going to be entirely rewritten eventually.
 
 
