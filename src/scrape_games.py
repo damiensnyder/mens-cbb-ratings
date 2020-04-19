@@ -649,6 +649,50 @@ def parse_play(play):
         return parse_caps_play(notation_info['player'], notation_info['rest'])
 
 
+def get_notation_style(play):
+    """Detect the notation style and separates the name of the player from the rest of the play."""
+    play = play.replace("UNKNOWN", "")
+    index_comma1 = play.find(",")
+    index_comma2 = play.find(", ")
+    try:
+        index_first_lower = play.index(re.findall("[a-z]|[0-9]", play)[0])
+    except IndexError:
+        index_first_lower = 7
+    if index_first_lower > 6:
+        notation_style = "caps"
+        index_name_end = play[:index_first_lower].rfind(" ") + 1
+        player = (play[index_comma1 + 1:index_name_end] + play[0:index_comma1]).title()
+        rest = play[index_name_end:].lower()
+    elif (play[0:4] == "TEAM") or (play[0:4] == "null") or (play[0:4] == "team"):
+        notation_style = "caps"
+        player = "Team"
+        while "  " in play:
+            play = play.replace("  ", " ")
+        index_name_end = 5
+        if "Team" in play:
+            index_name_end = play.index("Team") + 5
+        rest = play[index_name_end:].lower()
+    elif (play[0:3] == "TM ") \
+            or ((play[0] >= "0") and (play[0] <= "9") and (play[1] >= "0") and (play[2] <= "9")):
+        notation_style = "caps"
+        player = "Team"
+        while "  " in play:
+            play = play.replace("  ", " ")
+        rest = play[3:].lower()
+    elif (index_comma2 > 0) or (index_comma1 < 0):
+        notation_style = "semicolon"
+        player = play[0:index_comma2]
+        rest = play[index_comma2:]
+    else:
+        raise ValueError(f"Unrecognized notation style: '{play}'")
+
+    return {
+        'style': notation_style,
+        'player': player,
+        'rest': rest
+    }
+
+
 def clean_centi_time(raw_time):
     """Clean times in the format MM:SS.cc or MM:SS to a number of seconds."""
     minutes = int(raw_time[0:2])
@@ -667,6 +711,9 @@ def clean_score(score):
         return int(score[:score.index("-")]), int(score[score.index("-") + 1:])
     else:
         return [None] * 2
+
+
+# Below are functions dedicated to parsing plays in the 'caps' notation format.
 
 
 def parse_caps_play(player, rest):
@@ -807,344 +854,276 @@ def parse_caps_shot(player, rest):
     }
 
 
+# Below are functions dedicated to parsing plays in the 'semicolon' notation format.
+
+
 def parse_semicolon_play(play, player):
     """Parses a play in the 'semicolon' notation style."""
-    # starts of periods
-    if ("period start" in play) | ("game start" in play):
-        return None
-        # return {
-        #     'player': "Floor",
-        #     'action': "period start"
-        # }
-
-    # jump ball thrown
-    elif "jumpball startperiod" in play:
-        return None
-        # return {
-        #     'player': "Floor",
-        #     'action': "jump ball thrown"
-        # }
-
-    # ends of periods
-    elif ("period end" in play) | ("game end" in play):
-        return None
-        # return {
-        #     'player': "Floor",
-        #     'action': "period end"
-        # }
-
-    # jump balls
-    elif (", jumpball" in play) & ((" won" in play) | (" lost" in play)):
-        jumpball_result = " won" in play
-
+    if ("period start" in play) or ("game start" in play) or "jumpball startperiod" in play \
+            or ("period end" in play) or ("game end" in play):
+        return None     # ignore the starts and ends of periods
+    elif (", jumpball" in play) and ((" won" in play) or (" lost" in play)):    # jump balls
         return {
             'player': player,
             'action': "jump ball",
-            'success': jumpball_result
+            'success': " won" in play
         }
-
-    # substitutions
-    elif ", substitution" in play:
-        subbed_in = " in" in play
-
+    elif ", substitution" in play:                                        # substitutions
         return {
             'player': player,
             'action': "substitution",
-            'in': subbed_in
+            'in': " in" in play
         }
-
-    # possession arrow events
-    elif "Team, jumpball" in play:
-        if " heldball" in play:
-            jumpball_type = "held ball"
-        elif " blocktieup" in play:
-            jumpball_type = "block tie-up"
-        elif " lodgedball" in play:
-            jumpball_type = "lodged ball"
-        elif " outofbounds" in play:
-            jumpball_type = "out of bounds"
-        else:
-            raise ValueError(f"Unknown jump ball type: '{play}'")
-
-        return {
-            'player': "Team",
-            'action': "possession arrow",
-            'type': jumpball_type
-        }
-
-    # timeouts
-    elif "timeout " in play:
-        if " commercial" in play:
-            caller = "Floor"
-            timeout_type = "media"
-        elif " full" in play:
-            caller = "Team"
-            timeout_type = "full"
-        elif " short" in play:
-            caller = "Team"
-            timeout_type = "short"
-        else:
-            raise ValueError(f"Unrecognized timeout type: '{play}'")
-
-        return {
-            'player': caller,
-            'action': "timeout",
-            'type': timeout_type
-        }
-
-    # fouls received
-    elif ", foulon" in play:
+    elif "Team, jumpball" in play:                                        # possession arrow events
+        return parse_semicolon_possession_arrow(play, player)
+    elif "timeout " in play:                                              # timeouts
+        return parse_semicolon_timeout(play, player)
+    elif ", foulon" in play:                                              # fouls received
         return {
             'player': player,
             'action': "foul received"
         }
-
-    # fouls committed
-    elif ", foul" in play:
-        if " personal" in play:
-            foul_type = "personal"
-        elif " offensive" in play:
-            foul_type = "offensive"
-        elif "benchTechnical classa" in play:
-            foul_type = "bench technical, class A"
-        elif "adminTechnical classb" in play:
-            foul_type = "admin technical, class B"
-        elif "technical classa" in play:
-            foul_type = "technical, class A"
-        elif "technical flagrant2" in play:
-            foul_type = "technical, flagrant 2"
-        elif "coachTechnical classa" in play:
-            foul_type = "coach technical, class A"
-        elif "technical double" in play:
-            foul_type = "double technical"
-        elif "adminTechnical coachclassb" in play:
-            foul_type = "coach admin technical, class B"
-        elif "adminTechnical administrative" in play:
-            foul_type = "administrative admin technical"
-        elif "technical contactdeadball" in play:
-            foul_type = "deadball contact technical"
-        elif "adminTechnical benchclassb" in play:
-            foul_type = "bench admin technical, class B"
-        elif "coachTechnical double" in play:
-            foul_type = "double coach technical"
-        else:
-            raise ValueError(f"unrecognized foul type: '{play}'")
-
-        return {
-            'player': player,
-            'action': "foul committed",
-            'type': foul_type
-        }
-
-    # blocks
-    elif ", block" in play:
+    elif ", foul" in play:                                                # fouls committed
+        return parse_semicolon_foul_committed(play, player)
+    elif ", block" in play:                                               # blocks
         return {
             'player': player,
             'action': "block"
         }
-
-    # assists
-    elif ", assist" in play:
+    elif ", assist" in play:                                              # assists
         return {
             'player': player,
             'action': "assist"
         }
-
-    # steals
-    elif ", steal" in play:
+    elif ", steal" in play:                                               # steals
         return {
             'player': player,
             'action': "steal"
         }
-
-    # turnovers
-    elif ", turnover" in play:
-        if " travel" in play:
-            turnover_type = "travel"
-        elif " badpass" in play:
-            turnover_type = "bad pass"
-        elif " lostball" in play:
-            turnover_type = "lost ball"
-        elif " offensive" in play:
-            turnover_type = "offensive foul"
-        elif " 3sec" in play:
-            turnover_type = "3-second violation"
-        elif " shotclock" in play:
-            turnover_type = "shot clock violation"
-        elif " dribbling" in play:
-            turnover_type = "double dribble"
-        elif " 5sec" in play:
-            turnover_type = "5-second violation"
-        elif " 10sec" in play:
-            turnover_type = "10-second violation"
-        elif " laneviolation" in play:
-            turnover_type = "lane violation"
-        elif " other" in play:
-            turnover_type = "other"
-        else:
-            raise ValueError(f"unrecognized turnover type: '{play}'")
-
-        return {
-            'player': player,
-            'action': "turnover",
-            'type': turnover_type
-        }
-
-    # rebounds
-    elif " rebound" in play:
-        if " offensive" in play:
-            was_offensive = True
-        elif " defensive" in play:
-            was_offensive = False
-        else:
-            raise ValueError(f"unrecognized rebound type: '{play}'")
-
-        if "deadball" in play:
-            rebound_type = "deadball"
-        else:
-            rebound_type = "live"
-
-        return {
-            'player': player,
-            'action': "rebound",
-            'offensive': was_offensive,
-            'type': rebound_type
-        }
-
-    # 2-point field goal attempts
-    elif ", 2pt" in play:
-        if "pointsinthepaint" in play:
-            shot_length = "short 2"
-        else:
-            shot_length = "long 2"
-
-        shot_made = " made" in play
-        second_chance = "2ndchance" in play
-        fast_break = "fastbreak" in play
-        blocked = "blocked" in play
-
-        if " jumpshot " in play:
-            shot_type = "jump shot"
-        elif " pullupjumpshot " in play:
-            shot_type = "pull-up jump shot"
-        elif " stepbackjumpshot " in play:
-            shot_type = "step-back jump shot"
-        elif " turnaroundjumpshot " in play:
-            shot_type = "turn-around jump shot"
-        elif " hookshot " in play:
-            shot_type = "hook shot"
-        elif " layup " in play:
-            shot_type = "layup"
-        elif " dunk " in play:
-            shot_type = "dunk"
-        elif " drivinglayup " in play:
-            shot_type = "driving layup"
-        elif " alleyoop " in play:
-            shot_type = "alley-oop"
-        else:
-            raise ValueError(f"unrecognized shot type: '{play}'")
-
-        return {
-            'player': player,
-            'action': "shot",
-            'success': shot_made,
-            'length': shot_length,
-            'type': shot_type,
-            'second chance': second_chance,
-            'fast break': fast_break,
-            'blocked': blocked
-        }
-
-    # 3-point field goal attempts
-    elif ", 3pt" in play:
-        shot_made = " made" in play
-        second_chance = "2ndchance" in play
-        fast_break = "fastbreak" in play
-        blocked = "blocked" in play
-
-        if " jumpshot " in play:
-            shot_type = "jump shot"
-        elif " pullupjumpshot " in play:
-            shot_type = "pull-up jump shot"
-        elif " turnaroundjumpshot " in play:
-            shot_type = "turn-around jump shot"
-        elif " stepbackjumpshot " in play:
-            shot_type = "step-back jump shot"
-        else:
-            raise ValueError(f"unrecognized shot type: '{play}'")
-
-        return {
-            'player': player,
-            'action': "shot",
-            'success': shot_made,
-            'length': "3",
-            'type': shot_type,
-            'second chance': second_chance,
-            'fast break': fast_break,
-            'blocked': blocked
-        }
-
-    # free throw attempts
-    elif ", freethrow" in play:
-        shot_made = " made" in play
-
-        index_ft = play.index(", freethrow")
-        shot_number = int(play[index_ft + 12])
-        shot_out_of = int(play[index_ft + 15])
-
-        return {
-            'player': player,
-            'action': "free throw",
-            'success': shot_made,
-            'number': shot_number,
-            'out of': shot_out_of
-        }
-
-    # errors
-    else:
+    elif ", turnover" in play:                                            # turnovers
+        return parse_semicolon_turnover(play, player)
+    elif " rebound" in play:                                              # rebounds
+        return parse_semicolon_rebound(play, player)
+    elif ", 2pt" in play:                                                 # 2-pointers
+        return parse_semicolon_three_pointer(play, player)
+    elif ", 3pt" in play:                                                 # 3-pointers
+        return parse_semicolon_two_pointer(play, player)
+    elif ", freethrow" in play:                                           # free throw attempts
+        return parse_semicolon_free_throw(play, player)
+    else:   # raise ValueError if the play type could not be identified
         raise ValueError(f"Unrecognized play type: '{play}'")
 
 
-def get_notation_style(play):
-    """Detect the notation style and separates the name of the player from the rest of the play."""
-    play = play.replace("UNKNOWN", "")
-    index_comma1 = play.find(",")
-    index_comma2 = play.find(", ")
-    try:
-        index_first_lower = play.index(re.findall("[a-z]|[0-9]", play)[0])
-    except IndexError:
-        index_first_lower = 7
-    if index_first_lower > 6:
-        notation_style = "caps"
-        index_name_end = play[:index_first_lower].rfind(" ") + 1
-        player = (play[index_comma1 + 1:index_name_end] + play[0:index_comma1]).title()
-        rest = play[index_name_end:].lower()
-    elif (play[0:4] == "TEAM") or (play[0:4] == "null") or (play[0:4] == "team"):
-        notation_style = "caps"
-        player = "Team"
-        while "  " in play:
-            play = play.replace("  ", " ")
-        index_name_end = 5
-        if "Team" in play:
-            index_name_end = play.index("Team") + 5
-        rest = play[index_name_end:].lower()
-    elif (play[0:3] == "TM ") or ((play[0] >= "0") and (play[0] <= "9") and (play[1] >= "0") and (play[2] <= "9")):
-        notation_style = "caps"
-        player = "Team"
-        while "  " in play:
-            play = play.replace("  ", " ")
-        rest = play[3:].lower()
-    elif (index_comma2 > 0) | (index_comma1 < 0):
-        notation_style = "semicolon"
-        player = play[0:index_comma2]
-        rest = play[index_comma2:]
+def parse_semicolon_possession_arrow(play, player):
+    """Parses a play in semicolon format involving a possession arrow event."""
+    if " heldball" in play:
+        jumpball_type = "held ball"
+    elif " blocktieup" in play:
+        jumpball_type = "block tie-up"
+    elif " lodgedball" in play:
+        jumpball_type = "lodged ball"
+    elif " outofbounds" in play:
+        jumpball_type = "out of bounds"
     else:
-        raise ValueError(f"Unrecognized notation style: '{play}'")
+        raise ValueError(f"Unknown jump ball type: '{play}'")
 
     return {
-        'style': notation_style,
+        'player': "Team",
+        'action': "possession arrow",
+        'type': jumpball_type
+    }
+
+
+def parse_semicolon_timeout(play, player):
+    """Parses a play in semicolon format involving a timeout."""
+    if " commercial" in play:
+        caller = "Floor"
+        timeout_type = "media"
+    elif " full" in play:
+        caller = "Team"
+        timeout_type = "full"
+    elif " short" in play:
+        caller = "Team"
+        timeout_type = "short"
+    else:
+        raise ValueError(f"Unrecognized timeout type: '{play}'")
+
+    return {
+        'player': caller,
+        'action': "timeout",
+        'type': timeout_type
+    }
+
+
+def parse_semicolon_foul_committed(play, player):
+    """Parses a play in semicolon format involving a foul committed."""
+    if " personal" in play:
+        foul_type = "personal"
+    elif " offensive" in play:
+        foul_type = "offensive"
+    elif "benchTechnical classa" in play:
+        foul_type = "bench technical, class A"
+    elif "adminTechnical classb" in play:
+        foul_type = "admin technical, class B"
+    elif "technical classa" in play:
+        foul_type = "technical, class A"
+    elif "technical flagrant2" in play:
+        foul_type = "technical, flagrant 2"
+    elif "coachTechnical classa" in play:
+        foul_type = "coach technical, class A"
+    elif "technical double" in play:
+        foul_type = "double technical"
+    elif "adminTechnical coachclassb" in play:
+        foul_type = "coach admin technical, class B"
+    elif "adminTechnical administrative" in play:
+        foul_type = "administrative admin technical"
+    elif "technical contactdeadball" in play:
+        foul_type = "deadball contact technical"
+    elif "adminTechnical benchclassb" in play:
+        foul_type = "bench admin technical, class B"
+    elif "coachTechnical double" in play:
+        foul_type = "double coach technical"
+    else:
+        raise ValueError(f"unrecognized foul type: '{play}'")
+
+    return {
         'player': player,
-        'rest': rest
+        'action': "foul committed",
+        'type': foul_type
+    }
+
+
+def parse_semicolon_turnover(play, player):
+    """Parses a play in semicolon format involving a turnover."""
+    if " travel" in play:
+        turnover_type = "travel"
+    elif " badpass" in play:
+        turnover_type = "bad pass"
+    elif " lostball" in play:
+        turnover_type = "lost ball"
+    elif " offensive" in play:
+        turnover_type = "offensive foul"
+    elif " 3sec" in play:
+        turnover_type = "3-second violation"
+    elif " shotclock" in play:
+        turnover_type = "shot clock violation"
+    elif " dribbling" in play:
+        turnover_type = "double dribble"
+    elif " 5sec" in play:
+        turnover_type = "5-second violation"
+    elif " 10sec" in play:
+        turnover_type = "10-second violation"
+    elif " laneviolation" in play:
+        turnover_type = "lane violation"
+    elif " other" in play:
+        turnover_type = "other"
+    else:
+        raise ValueError(f"unrecognized turnover type: '{play}'")
+
+    return {
+        'player': player,
+        'action': "turnover",
+        'type': turnover_type
+    }
+
+
+def parse_semicolon_rebound(play, player):
+    """Parses a play in semicolon format involving a rebound."""
+    if " offensive" in play:
+        was_offensive = True
+    elif " defensive" in play:
+        was_offensive = False
+    else:
+        raise ValueError(f"unrecognized rebound type: '{play}'")
+
+    if "deadball" in play:
+        rebound_type = "deadball"
+    else:
+        rebound_type = "live"
+
+    return {
+        'player': player,
+        'action': "rebound",
+        'offensive': was_offensive,
+        'type': rebound_type
+    }
+
+
+def parse_semicolon_two_pointer(play, player):
+    """Parses a play in semicolon format involving a two-point attempt."""
+    if "pointsinthepaint" in play:
+        shot_length = "short 2"
+    else:
+        shot_length = "long 2"
+
+    if " jumpshot " in play:
+        shot_type = "jump shot"
+    elif " pullupjumpshot " in play:
+        shot_type = "pull-up jump shot"
+    elif " stepbackjumpshot " in play:
+        shot_type = "step-back jump shot"
+    elif " turnaroundjumpshot " in play:
+        shot_type = "turn-around jump shot"
+    elif " hookshot " in play:
+        shot_type = "hook shot"
+    elif " layup " in play:
+        shot_type = "layup"
+    elif " dunk " in play:
+        shot_type = "dunk"
+    elif " drivinglayup " in play:
+        shot_type = "driving layup"
+    elif " alleyoop " in play:
+        shot_type = "alley-oop"
+    else:
+        raise ValueError(f"unrecognized shot type: '{play}'")
+
+    return {
+        'player': player,
+        'action': "shot",
+        'success': " made" in play,
+        'length': shot_length,
+        'type': shot_type,
+        'second chance': "2ndchance" in play,
+        'fast break': "fastbreak" in play,
+        'blocked': "blocked" in play
+    }
+
+
+def parse_semicolon_three_pointer(play, player):
+    """Parses a play in semicolon format involving a three-point attempt."""
+    if " jumpshot " in play:
+        shot_type = "jump shot"
+    elif " pullupjumpshot " in play:
+        shot_type = "pull-up jump shot"
+    elif " turnaroundjumpshot " in play:
+        shot_type = "turn-around jump shot"
+    elif " stepbackjumpshot " in play:
+        shot_type = "step-back jump shot"
+    else:
+        raise ValueError(f"unrecognized shot type: '{play}'")
+
+    return {
+        'player': player,
+        'action': "shot",
+        'success': " made" in play,
+        'length': "3",
+        'type': shot_type,
+        'second chance': "2ndchance" in play,
+        'fast break': "fastbreak" in play,
+        'blocked': "blocked" in play
+    }
+
+
+def parse_semicolon_free_throw(play, player):
+    """Parses a play in semicolon format involving a free throw attempt."""
+    index_ft = play.index(", freethrow")
+
+    return {
+        'player': player,
+        'action': "free throw",
+        'success': " made" in play,
+        'number': int(play[index_ft + 12]),
+        'out of': int(play[index_ft + 15])
     }
 
 
