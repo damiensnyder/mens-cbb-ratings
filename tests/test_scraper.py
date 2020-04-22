@@ -3,13 +3,10 @@
 
 import pytest
 import src.scrape_util
-import src.scrape_games
-import src.scrape_rosters
 import time
-from bs4 import BeautifulSoup as bs
 
 
-### FUNCTIONS ###
+# Below are functions that test the scraper itself.
 
 
 @pytest.mark.slow

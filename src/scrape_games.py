@@ -200,14 +200,7 @@ def get_day(scraper, month, day, year, code, retries_left=MAX_RETRIES):
             soup = scraper.last_soup
 
         try:
-            el_table = soup.find('table', attrs={'style': 'border-collapse: collapse'})
-            for el_box_cell in el_table.find_all('tr', attrs={'style': 'border-bottom: 1px solid #cccccc'}):
-                el_link = el_box_cell.find('a', class_='skipMask')
-
-                # some games do not have box score links, this prevents those from breaking everything
-                if el_link is not None:
-                    box_ids.append(int(el_link.attrs['href'][10:-10]))
-
+            box_ids = find_box_ids(soup)
             scraper.log(f"Finished parsing day. {len(box_ids)} games found. (Date: {month}/{day}/{year})", 0)
             retries_left = 0
         except AttributeError as e:
@@ -240,6 +233,20 @@ def get_specifics(box_ids, by_pbp=False):
 # Below are functions dedicated to extracting information from BeautifulSoup representations of box
 # score webpages scraped from stats.ncaa.org. These functions do little or no pre-processing of the
 # values extracted.
+
+
+def find_box_ids(soup):
+    """Given a scoreboard page, find the box IDs of every game played on that day."""
+    box_ids = []
+    el_table = soup.find('table', attrs={'style': 'border-collapse: collapse'})
+    for el_box_cell in el_table.find_all('tr', attrs={'style': 'border-bottom: 1px solid #cccccc'}):
+        el_link = el_box_cell.find('a', class_='skipMask')
+
+        # some games do not have box score links, this prevents those from breaking everything
+        if el_link is not None:
+            box_ids.append(int(el_link.attrs['href'][10:-10]))
+
+    return box_ids
 
 
 def find_pbp_id(soup):

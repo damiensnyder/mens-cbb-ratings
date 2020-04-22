@@ -3,7 +3,7 @@ from bs4 import BeautifulSoup as bs
 
 correct_box_values = {
     1602674: {
-        'pbp id': 4654374,
+        'pbp ID': 4654374,
         'game time': "2018/11/06 19:00",
         'location': "Doug Collins Court at Redbird Arena",
         'attendance': 4764,
@@ -12,7 +12,7 @@ correct_box_values = {
                       '7', '9', '2', '4', '', '', '3', '']
     },
     1610092: {
-        'pbp id': 4738602,
+        'pbp ID': 4738602,
         'game time': "2019/01/05",
         'location': "Elmore Gymnasium",
         'attendance': 898,
@@ -21,7 +21,7 @@ correct_box_values = {
                       '14', '', '2', '2', '', '2']
     },
     1614866: {
-        'pbp id': 4696618,
+        'pbp ID': 4696618,
         'game time': "2019/02/04 19:00",
         'location': None,
         'attendance': 5251,
@@ -30,10 +30,19 @@ correct_box_values = {
                       '3', '2', '', '', '3']
     }
 }
+correct_scoreboard_values = {
+    20190101: {
+        'box IDs': [1609673, 1609674, 1609671, 1609672, 1609682, 1609680]
+    }
+}
 
 
 # Below are functions that test the functions intended to gather raw information from BeautifulSoup
-# objects representing stats.ncaa.org box score webpages.
+# objects representing stats.ncaa.org webpages.
+
+
+def test_find_box_ids(soup, correct_box_ids):
+    assert sg.find_box_ids(soup) == correct_box_ids
 
 
 def test_find_pbp_id(soup, correct_pbp_id):
@@ -122,10 +131,14 @@ def main():
     test_clean_time()
     test_clean_stat()
 
+    for date in correct_scoreboard_values:
+        with open(f'webpages/scoreboard_{date}.html', 'r') as file:
+            soup = bs(file, 'html.parser')
+            test_find_box_ids(soup, correct_scoreboard_values[date]['box IDs'])
     for box_id in correct_box_values:
         with open(f'webpages/box_{box_id}.html', 'r') as file:
             soup = bs(file, 'html.parser')
-            test_find_pbp_id(soup, correct_box_values[box_id]['pbp id'])
+            test_find_pbp_id(soup, correct_box_values[box_id]['pbp ID'])
             test_find_game_time(soup, correct_box_values[box_id]['game time'])
             test_find_location(soup, correct_box_values[box_id]['location'])
             test_find_attendance(soup, correct_box_values[box_id]['attendance'])
