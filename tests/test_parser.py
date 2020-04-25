@@ -125,11 +125,26 @@ def test_clean_stat():
     assert sg.clean_stat("23") == 23
 
 
+# Below are functions that test functions for parsing plays from play-by-play logs.
+
+
+def test_clean_centi_time():
+    """Tests relevant cases of clean_centi_time."""
+    assert sg.clean_centi_time('11:12') == 672
+    assert sg.clean_centi_time('01:12') == 72
+    assert sg.clean_centi_time('01:02') == 62
+    assert sg.clean_centi_time('01:12:63') == 72.63
+    assert sg.clean_centi_time('00:12:63') == 12.63
+    assert sg.clean_centi_time('00:02:63') == 2.63
+    assert sg.clean_centi_time('00:02:03') == 2.03
+
+
 def main():
     test_clean_name()
     test_clean_position()
     test_clean_time()
     test_clean_stat()
+    test_clean_centi_time()
 
     for date in correct_scoreboard_values:
         with open(f'webpages/scoreboard_{date}.html', 'r') as file:

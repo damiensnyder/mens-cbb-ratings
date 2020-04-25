@@ -20,6 +20,8 @@ YEAR_DIVISIONS = [
     {'year': 2019, 'code': 16700},
     {'year': 2020, 'code': 17060}
 ]
+CLOCK_RESETTING_ACTIONS = ["jump ball", "possession arrow", "shot", "turnover", "steal",
+                           "foul committed", "free throw"]
 
 
 # Functions for scraping game information from stats.ncaa.org. Going to be entirely rewritten.
@@ -172,7 +174,7 @@ def get_range(start_year, start_month, start_day, end_year, end_month, end_day):
 
         # get all the box IDs from the day
         scraper.log(f"Started parsing day. (Date: {month}/{day}/{year})", 0)
-        box_ids = get_day(scraper, month, day, year, season_code)
+        box_ids = scrape_box_ids(scraper, month, day, year, season_code)
         raw_games = [RawGame(scraper, box_id) for box_id in box_ids]
         sleep(CRAWL_DELAY)
 
@@ -186,7 +188,7 @@ def get_range(start_year, start_month, start_day, end_year, end_month, end_day):
     scraper.log("Finished scraping all days in range.", 0)
 
 
-def get_day(scraper, month, day, year, code, retries_left=MAX_RETRIES):
+def scrape_box_ids(scraper, month, day, year, code, retries_left=MAX_RETRIES):
     """Gets all box score IDs from games on the given date."""
     while retries_left > 0:
         # open the page
@@ -313,7 +315,7 @@ def find_referees(soup):
 
 
 def find_raw_boxes(soup):
-    """Given a box score page, find the box scores and return them raw. Returns them in a list in the format:
+    """Given a box score page, find the box scores. Returns them in a list in the format:
     [NCAA player id (as int),
     True if away or False if home,
     name in the format 'Last, First' (suffixes are inconsistent),
@@ -343,6 +345,28 @@ def find_raw_boxes(soup):
         is_away = False  # the first table of boxes is away, so set the next one to home
 
     return boxes
+
+
+def find_raw_plays(soup, pbp_id):
+    """Given a play-by-play page, find the plays. Returns them in a list in the format:
+    [PBP ID,
+    period (first half = 0, second half = 1, 1st overtime = 2, 2nd overtime = 3, etc),
+    time remaining in the format MM:SS:cc, MM:SS, or M:SS,
+    away team play,
+    score formatted like "46-41" with away team first,
+    home team play]"""
+    plays = []
+    period = 0
+    for el_table in soup.find_all('table', class_='mytable')[1:]:
+        for el_tr in el_table.find_all('tr'):
+            play_row = [pbp_id, period]
+            for el_td in el_tr.find_all('td'):
+                play_row.append(el_td.get_text().strip())
+            while len(play_row) < 5:
+                play_row.append("")
+            plays.append(play_row)
+        period += 1
+    return plays
 
 
 # Below are functions dedicated to cleaning values found by the raw box score parsing functions,
@@ -1133,6 +1157,118 @@ def parse_semicolon_free_throw(play, player):
         'number': int(play[index_ft + 12]),
         'out of': int(play[index_ft + 15])
     }
+
+
+# Below are functions dedicated to cleaning and preprocessing information from a game.
+
+
+def track_shot_clock(plays, max_shot_clock=30, orb_to_20=True):
+    """Given the parsed list of plays in a game, track how many seconds were on the shot clock
+    when each event happened and add that information to the dict of the play. orb_to_20 refers to
+    the rule added in the 2018–19 season wherein the shot clock resets to 20 seconds, not 30, after
+    offensive rebounds. max_shot_clock is set by default to 30, but before 2013ish the shot clock
+    was 35 seconds."""
+    shot_clock = max_shot_clock
+    last_play_time = 1200
+    shot_clock_end = 1200 - shot_clock
+
+    for play in plays:
+        if play['time'] != last_play_time:
+            shot_clock = max(play['time'] - shot_clock_end, 0)
+        play['shot clock'] = shot_clock
+        last_play_time = play['time']
+
+        if play['action'] in CLOCK_RESETTING_ACTIONS:
+            shot_clock_end = max(play['time'] - max_shot_clock, 0)
+        elif play['action'] == "rebound":
+            if play['offensive'] and orb_to_20:
+                shot_clock_end = max(play['time'] - 20, 0)
+            else:
+                shot_clock_end = max(play['time'] - max_shot_clock, 0)
+
+
+def track_partic(plays):
+    """Given the parsed plays of a game in a list, track which players were on the court during
+    each play and record participation in each play's dict."""
+    partic1 = []
+    partic2 = []
+    backfilled = []
+    last_period = 0
+    last_time = 1200
+    last_partic1 = []
+    last_partic2 = []
+
+    # go for the front and make a list of players known so far
+    for play in plays:
+        player = play['player']
+
+        # reset everything at the start of each period
+        if play['period'] != last_period:
+            partic1 = []
+            partic2 = []
+            backfilled = []
+            last_period = play['period']
+            last_time = 1200
+            last_partic1 = []
+            last_partic2 = []
+
+        # don't update subs until the clock changes
+        if play['time'] != last_time:
+            last_time = play['time']
+            last_partic1 = partic1.copy()
+            last_partic2 = partic2.copy()
+
+        play['partic1'] = last_partic1
+        play['partic2'] = last_partic2
+
+        # no need to change participation if no player did this action
+        if (player != "Floor") and (player != "Team"):
+            if play['is team 1']:
+                subbed_in = (play['action'] == "substitution") and play['in']
+                if ((player not in last_partic1) or subbed_in) and (player not in partic1):
+                    partic1.append(player)
+
+                if (player not in backfilled) and not subbed_in:
+                    for prev_play in plays:
+                        if 'partic1' in prev_play:
+                            if (prev_play['period'] == play['period']) \
+                                    and (prev_play['time'] >= play['time']) \
+                                    and (player not in prev_play['partic1']):
+                                prev_play['partic1'].append(player)
+
+                    # update subs
+                    last_partic1 = partic1.copy()
+                    last_partic2 = partic2.copy()
+
+                if (player not in backfilled) or subbed_in:
+                    backfilled.append(player)
+
+                # remove them from the list if they were substituted out
+                if (play['action'] == "substitution") and not play['in'] and (player in partic1):
+                    partic1.remove(player)
+            else:
+                subbed_in = (play['action'] == "substitution") and play['in']
+                if ((player not in last_partic2) or subbed_in) and (player not in partic2):
+                    partic2.append(player)
+
+                if (player not in backfilled) and not subbed_in:
+                    for prev_play in plays:
+                        if 'partic2' in prev_play:
+                            if (prev_play['period'] == play['period']) \
+                                    and (prev_play['time'] >= play['time']) \
+                                    and (player not in prev_play['partic2']):
+                                prev_play['partic2'].append(player)
+
+                    # update subs
+                    last_partic1 = partic1.copy()
+                    last_partic2 = partic2.copy()
+
+                if (player not in backfilled) or subbed_in:
+                    backfilled.append(player)
+
+                # remove them from the list if they were substituted out
+                if (play['action'] == "substitution") and not play['in'] and (player in partic2):
+                    partic2.remove(player)
 
 
 # Main method. Going to be entirely rewritten eventually.
