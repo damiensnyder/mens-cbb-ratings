@@ -481,11 +481,11 @@ def upload_game(cursor, game_id, h_team_season_id, a_team_season_id, h_name, a_n
         is_exhibition = "NULL"
 
     cursor.execute(
-        f"""INSERT INTO games (game_id, h_team_season_id, a_team_season_id, h_name, a_name,
-                               start_time, location, attendance, referees, is_exhibition)
-            VALUES (`{game_id}`, `{h_team_season_id}`, `{a_team_season_id}`, `{h_name}`,
-                    `{a_name}`, `{start_time}`, `{location}`, `{attendance}`, `{referees[0]}`,
-                    `{referees[1]}`, `{referees[2]}`, `{is_exhibition}`);"""
+        f"INSERT INTO games (game_id, h_team_season_id, a_team_season_id, h_name, a_name,"
+        f"                   start_time, location, attendance, referees, is_exhibition)"
+        f"VALUES (`{game_id}`, `{h_team_season_id}`, `{a_team_season_id}`, `{h_name}`,"
+        f"        `{a_name}`, `{start_time}`, `{location}`, `{attendance}`, `{referees[0]}`,"
+        f"        `{referees[1]}`, `{referees[2]}`, `{is_exhibition}`);"
     )
 
 
@@ -585,8 +585,8 @@ def parse_play_row(play_row):
             return None
 
         scores = clean_score(score)
-        parsed_play['away score'] = scores[0]
         parsed_play['home score'] = scores[1]
+        parsed_play['away score'] = scores[0]
         parsed_play['time'] = clean_centi_time(play_row[2])
 
         # get other information from the row
@@ -1115,13 +1115,13 @@ def track_shot_clock(plays, max_shot_clock=30, orb_to_20=True):
 def track_partic(plays):
     """Given the parsed plays of a game in a list, track which players were on the court during
     each play and record participation in each play's dict."""
-    partic1 = []
-    partic2 = []
+    h_partic = []
+    a_partic = []
     backfilled = []
     last_period = 0
     last_time = 1200
-    last_partic1 = []
-    last_partic2 = []
+    last_h_partic = []
+    last_a_partic = []
 
     # go for the front and make a list of players known so far
     for play in plays:
@@ -1129,71 +1129,173 @@ def track_partic(plays):
 
         # reset everything at the start of each period
         if play['period'] != last_period:
-            partic1 = []
-            partic2 = []
+            a_partic = []
+            h_partic = []
             backfilled = []
             last_period = play['period']
             last_time = 1200
-            last_partic1 = []
-            last_partic2 = []
+            last_a_partic = []
+            last_h_partic = []
 
         # don't update subs until the clock changes
         if play['time'] != last_time:
             last_time = play['time']
-            last_partic1 = partic1.copy()
-            last_partic2 = partic2.copy()
+            last_a_partic = a_partic.copy()
+            last_h_partic = h_partic.copy()
 
-        play['partic1'] = last_partic1
-        play['partic2'] = last_partic2
+        play['home partic'] = last_h_partic
+        play['away partic'] = last_a_partic
 
         # no need to change participation if no player did this action
         if (player != "Floor") and (player != "Team"):
-            if play['is team 1']:
+            if not play['is away']:
                 subbed_in = (play['action'] == "substitution") and play['in']
-                if ((player not in last_partic1) or subbed_in) and (player not in partic1):
-                    partic1.append(player)
+                if ((player not in last_h_partic) or subbed_in) and (player not in h_partic):
+                    h_partic.append(player)
 
                 if (player not in backfilled) and not subbed_in:
                     for prev_play in plays:
-                        if 'partic1' in prev_play:
+                        if 'home partic' in prev_play:
                             if (prev_play['period'] == play['period']) \
                                     and (prev_play['time'] >= play['time']) \
-                                    and (player not in prev_play['partic1']):
-                                prev_play['partic1'].append(player)
+                                    and (player not in prev_play['home partic']):
+                                prev_play['home partic'].append(player)
 
                     # update subs
-                    last_partic1 = partic1.copy()
-                    last_partic2 = partic2.copy()
+                    last_a_partic = a_partic.copy()
+                    last_h_partic = h_partic.copy()
 
                 if (player not in backfilled) or subbed_in:
                     backfilled.append(player)
 
                 # remove them from the list if they were substituted out
-                if (play['action'] == "substitution") and not play['in'] and (player in partic1):
-                    partic1.remove(player)
+                if (play['action'] == "substitution") and not play['in'] and (player in h_partic):
+                    h_partic.remove(player)
             else:
                 subbed_in = (play['action'] == "substitution") and play['in']
-                if ((player not in last_partic2) or subbed_in) and (player not in partic2):
-                    partic2.append(player)
+                if ((player not in last_a_partic) or subbed_in) and (player not in a_partic):
+                    a_partic.append(player)
 
                 if (player not in backfilled) and not subbed_in:
                     for prev_play in plays:
-                        if 'partic2' in prev_play:
+                        if 'away partic' in prev_play:
                             if (prev_play['period'] == play['period']) \
                                     and (prev_play['time'] >= play['time']) \
-                                    and (player not in prev_play['partic2']):
-                                prev_play['partic2'].append(player)
+                                    and (player not in prev_play['away partic']):
+                                prev_play['away partic'].append(player)
 
                     # update subs
-                    last_partic1 = partic1.copy()
-                    last_partic2 = partic2.copy()
+                    last_a_partic = a_partic.copy()
+                    last_h_partic = h_partic.copy()
 
                 if (player not in backfilled) or subbed_in:
                     backfilled.append(player)
 
                 # remove them from the list if they were substituted out
-                if (play['action'] == "substitution") and not play['in'] and (player in partic2):
-                    partic2.remove(player)
+                if (play['action'] == "substitution") and not play['in'] and (player in a_partic):
+                    a_partic.remove(player)
+
+
+def correct_minutes(boxes, plays):
+    """Fix plays with not exactly 5 players per team by checking who is listed as playing more or
+    fewer minutes in the box score than is reflected in the play-by-play."""
+    # make dicts of player name -> time played for each team
+    h_minutes = dict([[player['name'], player['time played']] for player in boxes
+                             if (player['name'] != "Team") and not player['is away']])
+    a_minutes = dict([[player['name'], player['time played']] for player in boxes
+                             if (player['name'] != "Team") and player['is away']])
+
+    # calculate the playing time inferred from play-by-play compared to the box score
+    last_time = 1200
+    last_period = 0
+    for play in plays:
+        if play['period'] == last_period:
+            time_diff = last_time - int(play['time'])
+        else:
+            time_diff = last_time
+
+        last_time = int(play['time'])
+        last_period = play['period']
+
+        try:
+            for player in play['home partic']:
+                h_minutes[player] -= time_diff
+            for player in play['away partic']:
+                a_minutes[player] -= time_diff
+        except KeyError:
+            pass
+
+    last_time = 1200
+    last_period = 0
+
+    # add or remove players who are logged as playing too many or too few minutes if more or fewer
+    # than 5 people are on the court for each team
+    for play in plays:
+        h_partic = play['home partic']
+        a_partic = play['away partic']
+        if play['period'] == last_period:
+            time_diff = last_time - int(play['time'])
+        else:
+            time_diff = last_time
+
+        last_time = int(play['time'])
+        last_period = play['period']
+
+        # add the players with the most extra minutes to partic1 if there are less than 5
+        while len(h_partic) < 5:
+            max_player = None
+            max_minutes = None
+
+            for player in h_minutes:
+                if (player not in h_partic) \
+                        and ((h_minutes[player] > max_minutes) or max_minutes is None):
+                    max_player = player
+                    max_minutes = h_minutes[player]
+
+            h_partic.append(max_player)
+            h_minutes[max_player] -= time_diff
+
+        # add the players with the most extra minutes to partic2 if there are less than 5
+        while len(a_partic) < 5:
+            max_player = None
+            max_minutes = None
+
+            for player in h_minutes:
+                if (player not in a_partic) \
+                        and ((a_minutes[player] > max_minutes) or max_minutes is None):
+                    max_player = player
+                    max_minutes = a_minutes[player]
+
+            a_partic.append(max_player)
+            a_minutes[max_player] -= time_diff
+
+        # remove the players with the most extra plays from partic1 if there are more than 5
+        while len(h_partic) < 5:
+            min_player = None
+            min_minutes = None
+
+            for player in h_minutes:
+                if (player not in h_partic) \
+                        and ((h_minutes[player] < min_minutes) or min_minutes is None):
+                    min_player = player
+                    min_minutes = h_minutes[player]
+
+            h_partic.remove(min_player)
+            h_minutes[min_player] += time_diff
+
+        # remove the players with the most extra plays from partic2 if there are more than 5
+        while len(h_partic) < 5:
+            min_player = None
+            min_minutes = None
+
+            for player in a_minutes:
+                if (player not in a_partic) \
+                        and ((a_minutes[player] < min_minutes) or min_minutes is None):
+                    min_player = player
+                    min_minutes = a_minutes[player]
+
+            a_partic.remove(min_player)
+            a_minutes[min_player] += time_diff
 
 
 # Main method. Going to be entirely rewritten eventually.
