@@ -49,22 +49,29 @@ def scrape_range(start_year, start_month, start_day, end_year, end_month, end_da
         day = start_date.day
         start_date += datetime.timedelta(1)
 
-        # get all the box IDs from the day
-        scraper.log(f"Started parsing day. (Date: {month}/{day}/{year})", 0)
-        box_ids = scrape_box_ids(scraper, month, day, year, season_code)
-        # TODO: write something to get and parse from these box IDs.
-        sleep(CRAWL_DELAY)
+        # scrape all games from that day
+        scrape_day(scraper, month, day, year, season_code)
 
     scraper.log("Finished scraping all days in range.", 0)
 
 
-def scrape_box_ids(scraper, month, day, year, code, retries_left=MAX_RETRIES):
+def scrape_day(scraper, month, day, year, season_code):
+    """Scrapes all games on the given date."""
+    scraper.log(f"Started parsing day. (Date: {month}/{day}/{year})", 0)
+    box_ids = scrape_box_ids(scraper, month, day, year, season_code)
+    for box_id in box_ids:
+        scrape_game(scraper, box_id)
+    sleep(CRAWL_DELAY)
+
+
+def scrape_box_ids(scraper, month, day, year, season_code):
     """Gets all box score IDs from games on the given date."""
+    retries_left = MAX_RETRIES
     while retries_left > 0:
         # open the page
-        url = f"http://stats.ncaa.org/season_divisions/{code}/scoreboards?game_date={month}%2F{day}%2F{year}"
+        url = f"http://stats.ncaa.org/season_divisions/{season_code}/scoreboards?" \
+              f"game_date={month}%2F{day}%2F{year}"
         soup = scraper.open_page(url=url)
-        box_ids = []
 
         # inexplicably, sometimes the soup will be set in the scraper but return None anyway
         if soup is None:
