@@ -24,132 +24,10 @@ CLOCK_RESETTING_ACTIONS = ["jump ball", "possession arrow", "shot", "turnover", 
                            "foul committed", "free throw"]
 
 
-# Functions for scraping game information from stats.ncaa.org. Going to be entirely rewritten.
+# Below are functions for scraping game information from stats.ncaa.org.
 
 
-class RawGame:
-    """A RawGame is an object designed to keep track of all of the information for a single game at the given box ID
-    with the given scraper. This is to prevent feeding a list in every time we want to scrape a page, and it keeps
-    the sets of information scraped for each game together.
-    """
-
-    def __init__(self, scraper, box_id):
-        self.scraper = scraper
-        self.box_id = box_id
-        self.metadata = []
-        self.boxes = []
-        self.pbp = []
-
-    def get_box_score(self, retries_left=MAX_RETRIES, by_pbp=False):
-        """Gets box score information for the game, then calls for the other thing to get the play-by-play."""
-        while retries_left > 0:
-            # open the page
-            if by_pbp:
-                url = f"http://stats.ncaa.org/game/box_score/{self.box_id}"
-            else:
-                url = f"http://stats.ncaa.org/contests/{self.box_id}/box_score"
-            soup = self.scraper.open_page(url=url)
-
-            # inexplicably, sometimes the soup will not return anything despite existing
-            if soup is None:
-                self.scraper.log(f"Soup did not return. Box ID: {self.box_id}", 4)
-                soup = self.scraper.last_soup
-
-            try:
-                # get the play-by-play ID for the game
-                el_pbp = soup.find('ul', class_='level1').find_all('li')[-5].find('a')
-                pbp_id = int(el_pbp.attrs['href'][-7:])
-
-                # get the location of the game
-                el_metadata_1 = soup.find_all('table', attrs={'width': '50%', 'align': 'center'})[2]
-                metadata_1 = el_metadata_1.get_text().strip().replace("\n", " ")
-
-                # get the list of referees for the game
-                el_referees = soup.find_all('table', attrs={'width': '50%', 'align': 'center'})[3].find_all('td')[1]
-                referees = el_referees.get_text().strip().replace("\n", " ")
-
-                team_names = []
-                game_stat_lines = []
-
-                for el_box in soup.find_all('table', class_='mytable')[-2:]:
-                    el_heading = el_box.find('tr', class_='heading')
-                    team_name = el_heading.get_text().strip()
-                    team_names.append(team_name)
-
-                    for el_player in el_box.find_all('tr', class_='smtext'):
-                        el_player_id = el_player.find('a')
-                        if el_player_id is None:
-                            player_id = ""
-                        else:
-                            player_id = int(el_player_id.attrs['href'][-7:])
-                        player_stats = [self.box_id, pbp_id, team_name, player_id]
-
-                        for el_stat in el_player.find_all('td'):
-                            player_stats.append(el_stat.get_text().strip())
-
-                        game_stat_lines.append(player_stats)
-
-                self.scraper.log(f"Finished parsing box score. (Box ID: {self.box_id})", 2)
-                for box_score in game_stat_lines:
-                    self.boxes.append(box_score)
-                self.metadata = [self.box_id, pbp_id, team_names[0], team_names[1], metadata_1, referees]
-                retries_left = 0
-                self.get_pbp()
-            except AttributeError as e:
-                self.scraper.log(f"Error parsing box score: '{e}' (Box ID: {self.box_id})")
-                self.metadata = []
-                self.boxes = []
-                if retries_left <= 0:
-                    self.scraper.log(f"Done retrying. (Box ID: {self.box_id})", 1)
-            retries_left -= 1
-            sleep(CRAWL_DELAY)
-
-    def parse_box_score(self, soup):
-        pbp_id = find_pbp_id(soup)
-        game_time = find_game_time(soup)
-        location = find_location(soup)
-        attendance = find_attendance(soup)
-        referees = find_referees(soup)
-        self.boxes = find_raw_boxes(soup)
-
-    def get_pbp(self, retries_left=MAX_RETRIES):
-        """Gets play information for the game."""
-        pbp_id = self.metadata[1]
-
-        while retries_left > 0:
-            # open the page
-            url = f"http://stats.ncaa.org/game/play_by_play/{pbp_id}"
-            soup = self.scraper.open_page(url=url)
-
-            # inexplicably, sometimes the soup will not return anything despite existing
-            if soup is None:
-                self.scraper.log(f"Soup did not return. PBP ID: {pbp_id}")
-                soup = self.scraper.last_soup
-
-            try:
-                period = 0
-                for el_table in soup.find_all('table', class_='mytable')[1:]:
-                    for el_tr in el_table.find_all('tr'):
-                        pbp_row = [pbp_id, period]
-                        for el_td in el_tr.find_all('td'):
-                            pbp_row.append(el_td.get_text().strip())
-                        while len(pbp_row) < 5:
-                            pbp_row.append("")
-                        self.pbp.append(pbp_row)
-                    period += 1
-
-                self.scraper.log(f"Finished parsing play-by-play. (PBP ID: {pbp_id})", 2)
-                retries_left = 0
-            except AttributeError as e:
-                self.scraper.log(f"Error parsing play-by-play: '{e}' (PBP ID: {pbp_id})")
-                self.pbp = []
-                retries_left -= 1
-                if retries_left <= 0:
-                    self.scraper.log(f"Done retrying. (PBP ID: {pbp_id})", 1)
-            sleep(CRAWL_DELAY)
-
-
-def get_range(start_year, start_month, start_day, end_year, end_month, end_day):
+def scrape_range(start_year, start_month, start_day, end_year, end_month, end_day):
     """Get each day in the range [start_date, end_date) and write all the results to file."""
     scraper = Scraper(thread_count=DEFAULT_THREAD_COUNT, verbose=VERBOSE)
 
@@ -165,7 +43,6 @@ def get_range(start_year, start_month, start_day, end_year, end_month, end_day):
 
     # iterate through each day in the date range
     while start_date < end_date:
-
         # get the current day and increment
         year = start_date.year
         month = start_date.month
@@ -175,15 +52,8 @@ def get_range(start_year, start_month, start_day, end_year, end_month, end_day):
         # get all the box IDs from the day
         scraper.log(f"Started parsing day. (Date: {month}/{day}/{year})", 0)
         box_ids = scrape_box_ids(scraper, month, day, year, season_code)
-        raw_games = [RawGame(scraper, box_id) for box_id in box_ids]
+        # TODO: write something to get and parse from these box IDs.
         sleep(CRAWL_DELAY)
-
-        # get the box and write to file for each game
-        for raw_game in raw_games:
-            raw_game.get_box_score()
-            sleep(CRAWL_DELAY)
-
-        scraper.log(f"Finished writing to file. (Date: {month}/{day}/{year})", 0)
 
     scraper.log("Finished scraping all days in range.", 0)
 
@@ -196,40 +66,88 @@ def scrape_box_ids(scraper, month, day, year, code, retries_left=MAX_RETRIES):
         soup = scraper.open_page(url=url)
         box_ids = []
 
-        # inexplicably, sometimes the soup will exist but not return anything
+        # inexplicably, sometimes the soup will be set in the scraper but return None anyway
         if soup is None:
             scraper.log(f"Soup did not return. (URL: {url})")
             soup = scraper.last_soup
 
         try:
-            box_ids = find_box_ids(soup)
-            scraper.log(f"Finished parsing day. {len(box_ids)} games found. (Date: {month}/{day}/{year})", 0)
-            retries_left = 0
+            return find_box_ids(soup)
         except AttributeError as e:
             scraper.log(f"Error parsing day: '{e}' (Date: {month}/{day}/{year})")
             retries_left -= 1
             if retries_left <= 0:
                 scraper.log(f"Done retrying. (Date: {month}/{day}/{year})", 0)
+                return None
         sleep(CRAWL_DELAY)
 
-    return box_ids
+
+def scrape_game(scraper, box_id, by_pbp=False):
+    """Gets and uploads all information from the game at the given box ID."""
+    box_soup = scrape_box_score(scraper, box_id, by_pbp=by_pbp)
+    if box_soup is not None:
+        pbp_id = find_pbp_id(box_soup)
+        game_time = find_game_time(box_soup)
+        location = find_location(box_soup)
+        attendance = find_attendance(box_soup)
+        referees = find_referees(box_soup)
+        raw_boxes = find_raw_boxes(box_soup)
+        pbp_soup = scrape_plays(scraper, pbp_id)
+        if pbp_soup is not None:
+            raw_plays = find_raw_plays(box_soup)
 
 
-def get_specifics(box_ids, by_pbp=False):
-    scraper = Scraper(thread_count=DEFAULT_THREAD_COUNT, verbose=VERBOSE)
+def scrape_box_score(scraper, box_id, by_pbp=False):
+    """Gets box score information for the game"""
+    retries_left = MAX_RETRIES
+    while retries_left > 0:
+        # open the page
+        if by_pbp:
+            url = f"http://stats.ncaa.org/game/box_score/{box_id}"
+        else:
+            url = f"http://stats.ncaa.org/contests/{box_id}/box_score"
+        soup = scraper.open_page(url=url)
 
-    # get all the box IDs from the day
-    scraper.log(f"Started parsing.", 0)
-    raw_games = [RawGame(scraper, box_id) for box_id in box_ids]
-    sleep(CRAWL_DELAY)
+        # inexplicably, sometimes the soup will not return anything despite existing
+        if soup is None:
+            scraper.log(f"Soup did not return. Box ID: {box_id}", 4)
+            soup = scraper.last_soup
 
-    # get the box and write to file for each game
-    for raw_game in raw_games:
-        raw_game.get_box_score(by_pbp=by_pbp)
+        try:
+            find_raw_boxes(soup)    # janky bellwether for whether the soup is usable
+            return soup
+        except AttributeError as e:
+            scraper.log(f"Error parsing box score: '{e}' (Box ID: {box_id})")
+            if retries_left <= 0:
+                scraper.log(f"Done retrying. (Box ID: {box_id})", 1)
+                return None
+        retries_left -= 1
         sleep(CRAWL_DELAY)
 
-    scraper.log(f"Finished writing to file.", 0)
-    scraper.log("Finished scraping all days in range.", 0)
+
+def scrape_plays(scraper, pbp_id):
+    """Gets all plays from the game with the given PBP ID."""
+    retries_left = MAX_RETRIES
+    while retries_left > 0:
+        # open the page
+        url = f"http://stats.ncaa.org/game/play_by_play/{pbp_id}"
+        soup = scraper.open_page(url=url)
+
+        # inexplicably, sometimes the soup will be set in the scraper but return None anyway
+        if soup is None:
+            scraper.log(f"Soup did not return. PBP ID: {pbp_id}")
+            soup = scraper.last_soup
+
+        try:
+            find_raw_plays(soup, pbp_id)  # janky bellwether for whether the soup is usable
+            return soup
+        except AttributeError as e:
+            scraper.log(f"Error parsing play-by-play: '{e}' (PBP ID: {pbp_id})")
+            retries_left -= 1
+            if retries_left <= 0:
+                scraper.log(f"Done retrying. (PBP ID: {pbp_id})", 1)
+                return None
+        sleep(CRAWL_DELAY)
 
 
 # Below are functions dedicated to extracting information from BeautifulSoup representations of box
@@ -1276,11 +1194,11 @@ def track_partic(plays):
 
 def main(argv):
     if len(argv) == 6:
-        get_range(int(argv[0]), int(argv[1]), int(argv[2]), int(argv[3]), int(argv[4]), int(argv[5]))
+        scrape_range(int(argv[0]), int(argv[1]), int(argv[2]), int(argv[3]), int(argv[4]), int(argv[5]))
     else:
         today = datetime.datetime.today()
         yesterday = today - datetime.timedelta(1)
-        get_range(yesterday.year, yesterday.month, yesterday.day, today.year, today.month, today.day)
+        scrape_range(yesterday.year, yesterday.month, yesterday.day, today.year, today.month, today.day)
 
 
 if __name__ == '__main__':
