@@ -31,6 +31,15 @@ UPLOAD_BOX_QUERY = "INSERT INTO boxes (game_id, box_in_game, player_id, player_n
                    "blk, pf) VALUES (%i, %i, %s, %s, %i, %s, %i, %i, %i, %i, %i, %i, %i, %i, %i," \
                    "%i, %i, %i, %i, %i);"
 
+NULLABLE_PLAY_FIELDS = []
+UPLOAD_PLAY_QUERY = "INSERT INTO plays (game_id, play_in_game, period, time_remaining," \
+                    "shot_clock, h_score, a_score, agent_is_away, action, flag1, flag2, flag3," \
+                    "flag4, flag5, flag6, agent_id, agent_name, h_id1, h_name1, h_id2, h_name2," \
+                    "h_id3, h_name3, h_id4, h_name4, h_id5, h_name5, a_id1, a_name1, a_id2," \
+                    "a_name2, a_id3, a_name3, a_id4, a_name4, a_id5, a_name5) VALUES (%i, %i," \
+                    "%i, %i, %i, %i, %i, %s, %s, %s, %i, %i, %i, %i, %i, %s, %i, %s, %i, %s," \
+                    "%i, %s, %i, %s, %i, %s, %i, %s, %i, %s, %i, %s, %i, %s, %i, %s, %i, %s"
+
 
 # Below are functions for scraping game information from stats.ncaa.org.
 
@@ -523,55 +532,24 @@ def upload_box(cursor, boxes):
         i += 1
 
 
-def upload_play(cursor, game_id, play_in_game, period, time_remaining, shot_clock, h_score, a_score,
-                agent_is_away, action, flags, agent_id, agent_name, players):
+def upload_play(cursor, game_id, plays):
     """Assert that fields that are required not to be null in the database are not null, and
     replace any other null fields with the string 'NULL'. Except I'm not bothering with the ints
     yet."""
-    assert (game_id is not None) and (play_in_game is not None)
-    assert (agent_is_away is not None) and (action is not None)
+    i = 0   # tracks which play it is in the game
+    for play in plays:
+        for field in NULLABLE_PLAY_FIELDS:
+            if field not in play:
+                play[field] = None   # replace nullable fields with None
 
-    if period is None:
-        period = "NULL"
-    if time_remaining is None:
-        period = "NULL"
-    if shot_clock is None:
-        period = "NULL"
-    if h_score is None:
-        period = "NULL"
-    if a_score is None:
-        period = "NULL"
-    if agent_is_away is None:
-        period = "NULL"
-    if action is None:
-        period = "NULL"
-    if agent_name is None:
-        period = "NULL"
-    if agent_id is None:
-        period = "NULL"
-    if flags is None:
-        flags = ["NULL"] * 6
-    null_flags = [i for i in range(len(flags)) if flags[i] is None]
-    for i in null_flags:
-        flags[i] = "NULL"
-    if players is None:
-        players = ["NULL"] * 10
-    null_players = [i for i in range(len(players)) if players[i] is None]
-    for i in null_players:
-        players[i] = "NULL"
+        play_tuple = (game_id, i)
+        for field in NULLABLE_PLAY_FIELDS:
+            play_tuple += (play[field],)
 
-    cursor.execute(
-        f"""INSERT INTO plays (game_id, play_in_game, period, time_remaining, shot_clock, h_score,
-                               a_score, agent_is_away, action, flag1, flag2, flag3, flag4, flag5,
-                               flag6, agent_id, agent_name, h_p1, h_p2, h_p3, h_p4, h_p5, a_p1,
-                               a_p2, a_p3, a_p4, a_p5)
-            VALUES (`{game_id}`, `{play_in_game}`, `{period}`, `{time_remaining}`, `{shot_clock}`,
-                    `{h_score}`, `{a_score}`, `{agent_is_away}`, `{action}`, `{flags[0]}`,
-                    `{flags[1]}`, `{flags[2]}`, `{flags[3]}`, `{flags[4]}`, `{flags[5]}`,
-                    `{agent_id}`, `{agent_name}`, `{players[0]}`, `{players[1]}`, `{players[2]}`,
-                    `{players[3]}`, `{players[4]}`, `{players[5]}`, `{players[6]}`, `{players[7]}`,
-                    `{players[8]}`, `{players[9]}`);"""
-    )
+        cursor.execute(UPLOAD_BOX_QUERY, play_tuple)
+        i += 1
+
+    cursor.execute(UPLOAD_PLAY_QUERY)
 
 
 # Below are functions for parsing a play from the play-by-play logs.
