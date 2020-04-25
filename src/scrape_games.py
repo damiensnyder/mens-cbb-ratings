@@ -118,15 +118,15 @@ def scrape_game(scraper, cursor, box_id, by_pbp=False):
         attendance = find_attendance(box_soup)
         referees = find_referees(box_soup)
         upload_game(cursor, pbp_id, None, None, None, None, game_time,
-                    location, attendance, referees)
+                    location, attendance, referees, None)
 
         raw_boxes = find_raw_boxes(box_soup)
-        boxes = clean_raw_boxes(raw_boxes)
+        boxes = clean_raw_boxes(raw_boxes, None, None)
         upload_box(cursor, boxes)
 
         pbp_soup = scrape_plays(scraper, pbp_id)
         if pbp_soup is not None:
-            raw_plays = find_raw_plays(box_soup)
+            raw_plays = find_raw_plays(box_soup, pbp_id)
 
 
 def scrape_box_score(scraper, box_id, by_pbp=False):
@@ -525,7 +525,7 @@ def upload_box(cursor, boxes):
                 box[field] = None   # replace nullable fields with None
 
         box_tuple = (box['PBP id'], i)
-        for field in NULLABLE_BOX_FIELDS
+        for field in NULLABLE_BOX_FIELDS:
             box_tuple += (box[field],)
 
         cursor.execute(UPLOAD_BOX_QUERY, box_tuple)
