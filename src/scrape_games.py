@@ -23,8 +23,13 @@ YEAR_DIVISIONS = [
 ]
 CLOCK_RESETTING_ACTIONS = ["jump ball", "possession arrow", "shot", "turnover", "steal",
                            "foul committed", "free throw"]
+
 NULLABLE_BOX_FIELDS = ["player ID", "name", "is away", "position", "time played", "FGM", "FGA",
                        "3PM", "3PA", "FTM", "FTA", "ORB", "DRB", "AST", "TOV", "STL", "BLK", "PF"]
+UPLOAD_BOX_QUERY = "INSERT INTO boxes (game_id, box_in_game, player_id, player_name, is_away," \
+                   "position, time_played, fgm, fga, 3pm, 3pa, ftm, fta, orb, drb, ast, tov, stl" \
+                   "blk, pf) VALUES (%i, %i, %s, %s, %i, %s, %i, %i, %i, %i, %i, %i, %i, %i, %i," \
+                   "%i, %i, %i, %i, %i);"
 
 
 # Below are functions for scraping game information from stats.ncaa.org.
@@ -502,23 +507,19 @@ def upload_game(cursor, game_id, h_team_season_id, a_team_season_id, h_name, a_n
 
 def upload_box(cursor, boxes):
     """Assert that fields that are required not to be null in the database are not null, and
-    replace any other null fields with the string 'NULL'. Except I'm not bothering with the ints
-    yet."""
+    replace any other null fields with None. Upload the box to the database."""
     i = 0   # tracks which box it is in the game
     for box in boxes:
         assert 'PBP id' in box
         for field in NULLABLE_BOX_FIELDS:
             if field not in box:
-                box[field] = "NULL"
+                box[field] = None   # replace nullable fields with None
 
-        # add the value of each nullable field to the query in a loop instead of individually
-        # this is vulnerable to SQL injection. i'd better fix that before Bobby Tables plays
-        query = "INSERT INTO boxes (game_id, box_in_game, player_id, player_name, is_away," \
-                "position, time_played, fgm, fga, 3pm, 3pa, ftm, fta, orb, drb, ast, tov," \
-                f"stl, blk, pf) VALUES (`{box['PBP ID']}`, `{i}`"
-        for field in NULLABLE_BOX_FIELDS:
-            query += f", `{box[field]}`"
-        cursor.execute(query + ");")
+        box_tuple = (box['PBP id'], i)
+        for field in NULLABLE_BOX_FIELDS
+            box_tuple += (box[field],)
+
+        cursor.execute(UPLOAD_BOX_QUERY, box_tuple)
         i += 1
 
 
