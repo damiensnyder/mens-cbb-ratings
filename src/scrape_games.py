@@ -2,6 +2,7 @@ from src.scrape_util import Scraper
 from time import sleep
 import datetime
 import re
+import pymysql
 
 CRAWL_DELAY = 1
 VERBOSE = 3
@@ -22,6 +23,8 @@ YEAR_DIVISIONS = [
 ]
 CLOCK_RESETTING_ACTIONS = ["jump ball", "possession arrow", "shot", "turnover", "steal",
                            "foul committed", "free throw"]
+NULLABLE_BOX_FIELDS = ["player ID", "name", "is away", "position", "time played", "FGM", "FGA",
+                       "3PM", "3PA", "FTM", "FTA", "ORB", "DRB", "AST", "TOV", "STL", "BLK", "PF"]
 
 
 # Below are functions for scraping game information from stats.ncaa.org.
@@ -30,6 +33,8 @@ CLOCK_RESETTING_ACTIONS = ["jump ball", "possession arrow", "shot", "turnover", 
 def scrape_range(start_year, start_month, start_day, end_year, end_month, end_day):
     """Get each day in the range [start_date, end_date) and write all the results to file."""
     scraper = Scraper(thread_count=DEFAULT_THREAD_COUNT, verbose=VERBOSE)
+    conn = pymysql.connect('localhost', '', '', 'mens_cbb_ratings')
+    cursor = conn.cursor()
 
     # make the dates into datetime objects
     start_date = datetime.datetime(start_year, start_month, start_day)
@@ -50,17 +55,17 @@ def scrape_range(start_year, start_month, start_day, end_year, end_month, end_da
         start_date += datetime.timedelta(1)
 
         # scrape all games from that day
-        scrape_day(scraper, month, day, year, season_code)
+        scrape_day(scraper, cursor, month, day, year, season_code)
 
     scraper.log("Finished scraping all days in range.", 0)
 
 
-def scrape_day(scraper, month, day, year, season_code):
+def scrape_day(scraper, cursor, month, day, year, season_code):
     """Scrapes all games on the given date."""
     scraper.log(f"Started parsing day. (Date: {month}/{day}/{year})", 0)
     box_ids = scrape_box_ids(scraper, month, day, year, season_code)
     for box_id in box_ids:
-        scrape_game(scraper, box_id)
+        scrape_game(scraper, cursor, box_id)
     sleep(CRAWL_DELAY)
 
 
@@ -89,7 +94,7 @@ def scrape_box_ids(scraper, month, day, year, season_code):
         sleep(CRAWL_DELAY)
 
 
-def scrape_game(scraper, box_id, by_pbp=False):
+def scrape_game(scraper, cursor, box_id, by_pbp=False):
     """Gets and uploads all information from the game at the given box ID."""
     box_soup = scrape_box_score(scraper, box_id, by_pbp=by_pbp)
     if box_soup is not None:
@@ -98,7 +103,13 @@ def scrape_game(scraper, box_id, by_pbp=False):
         location = find_location(box_soup)
         attendance = find_attendance(box_soup)
         referees = find_referees(box_soup)
+        upload_game(cursor, pbp_id, None, None, None, None, game_time,
+                    location, attendance, referees)
+
         raw_boxes = find_raw_boxes(box_soup)
+        boxes = clean_raw_boxes(raw_boxes)
+        upload_box(cursor, boxes)
+
         pbp_soup = scrape_plays(scraper, pbp_id)
         if pbp_soup is not None:
             raw_plays = find_raw_plays(box_soup)
@@ -489,26 +500,26 @@ def upload_game(cursor, game_id, h_team_season_id, a_team_season_id, h_name, a_n
     )
 
 
-def upload_box(cursor, game_id, box_in_game, player_id, player_name, is_away, seconds_played,
-               fgm, fga, tpm, tpa, ftm, fta, orb, drb, ast, tov, stl, blk, pf):
+def upload_box(cursor, boxes):
     """Assert that fields that are required not to be null in the database are not null, and
     replace any other null fields with the string 'NULL'. Except I'm not bothering with the ints
     yet."""
-    assert (game_id is not None) and (box_in_game is not None)
-    if player_id is None:
-        player_id = "NULL"
-    if player_name is None:
-        player_name = "NULL"
-    if is_away is None:
-        is_away = "NULL"
+    i = 0   # tracks which box it is in the game
+    for box in boxes:
+        assert 'PBP id' in box
+        for field in NULLABLE_BOX_FIELDS:
+            if field not in box:
+                box[field] = "NULL"
 
-    cursor.execute(
-        f"""INSERT INTO boxes (game_id, box_in_game, player_id, player_name, is_away,
-                               start_time, location, attendance, referees, is_exhibition)
-            VALUES (`{game_id}`, `{box_in_game}`, `{player_id}`, `{player_name}`, `{is_away}`,
-                    `{seconds_played}`, `{fgm}`, `{fga}`, `{tpm}`, `{tpa}`,  `{ftm}`, `{fta}`,
-                    `{orb}`, `{drb}`, `{ast}`, `{tov}`, `{stl}`, `{blk}`, `{pf}`);"""
-    )
+        # add the value of each nullable field to the query in a loop instead of individually
+        # this is vulnerable to SQL injection. i'd better fix that before Bobby Tables plays
+        query = "INSERT INTO boxes (game_id, box_in_game, player_id, player_name, is_away," \
+                "position, time_played, fgm, fga, 3pm, 3pa, ftm, fta, orb, drb, ast, tov," \
+                f"stl, blk, pf) VALUES (`{box['PBP ID']}`, `{i}`"
+        for field in NULLABLE_BOX_FIELDS:
+            query += f", `{box[field]}`"
+        cursor.execute(query + ");")
+        i += 1
 
 
 def upload_play(cursor, game_id, play_in_game, period, time_remaining, shot_clock, h_score, a_score,
