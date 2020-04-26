@@ -31,7 +31,9 @@ UPLOAD_BOX_QUERY = "INSERT INTO boxes (game_id, box_in_game, player_id, player_n
                    "blk, pf) VALUES (%i, %i, %s, %s, %i, %s, %i, %i, %i, %i, %i, %i, %i, %i, %i," \
                    "%i, %i, %i, %i, %i);"
 
-NULLABLE_PLAY_FIELDS = []
+NULLABLE_PLAY_FIELDS = ["period", "time", "shot clock", "home score", "away score", "is away",
+                        "action", "flag 1", "flag 2", "flag 3", "flag 4", "flag 5", "flag 6",
+                        "agent name", "agent ID"]
 UPLOAD_PLAY_QUERY = "INSERT INTO plays (game_id, play_in_game, period, time_remaining," \
                     "shot_clock, h_score, a_score, agent_is_away, action, flag1, flag2, flag3," \
                     "flag4, flag5, flag6, agent_id, agent_name, h_id1, h_name1, h_id2, h_name2," \
@@ -1303,4 +1305,4 @@ def main(argv):
 if __name__ == '__main__':
     # main([2017, 10, 30, 2018, 4, 7])
     # main(sys.argv[1:])
-    get_specifics([4655893, 4657243, 4662221, 4669299, 4669980, 4675929, 4748501], by_pbp=True)
+    pass
