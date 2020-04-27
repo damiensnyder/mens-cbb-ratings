@@ -11,3 +11,4 @@ cbr
 .idea
 *.html
 src/rosters_to_db.py
+src/scrape_rosters.py
