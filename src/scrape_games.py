@@ -43,7 +43,10 @@ UPLOAD_PLAY_QUERY = "INSERT INTO plays (game_id, play_in_game, period, time_rema
                     "a_p4_name, a_p5_id, a_p5_name) VALUES (%i, %i, %i, %i, %i, %i, %i, %s," \
                     "%s, %s, %i, %i, %i, %i, %i, %s, %i, %s, %i, %s, %i, %s, %i, %s, %i, %s," \
                     "%i, %s, %i, %s, %i, %s, %i, %s, %i, %s, %i, %s"
-GET_ROSTER_QUERY = "SELECT (player_id, player_name) FROM player_seasons WHERE team_season_id = %i"
+FETCH_TEAM_SEASON_ID_QUERY = "SELECT (team_season_id) FROM team_seasons WHERE school_id = %i AND" \
+                             "season_year = %i"
+FETCH_ROSTER_QUERY = "SELECT (player_id, player_name) FROM player_seasons WHERE team_season_id =" \
+                     "%i"
 
 
 # Below are functions for scraping game information from stats.ncaa.org.
@@ -75,18 +78,18 @@ def scrape_range(start_year, start_month, start_day, end_year, end_month, end_da
         start_date += datetime.timedelta(1)
 
         # scrape all games from that day
-        scrape_day(scraper, cursor, month, day, year, season_code)
+        scrape_day(scraper, cursor, month, day, year, season, season_code)
         conn.commit()
 
     scraper.log("Finished scraping all days in range.", 0)
 
 
-def scrape_day(scraper, cursor, month, day, year, season_code):
+def scrape_day(scraper, cursor, month, day, year, season, season_code):
     """Scrapes all games on the given date."""
     scraper.log(f"Started parsing day. (Date: {month}/{day}/{year})", 0)
     box_ids = scrape_box_ids(scraper, month, day, year, season_code)
     for box_id in box_ids:
-        scrape_game(scraper, cursor, box_id)
+        scrape_game(scraper, cursor, season, box_id)
     sleep(CRAWL_DELAY)
 
 
@@ -115,7 +118,7 @@ def scrape_box_ids(scraper, month, day, year, season_code):
         sleep(CRAWL_DELAY)
 
 
-def scrape_game(scraper, cursor, box_id, by_pbp=False):
+def scrape_game(scraper, cursor, season, box_id, by_pbp=False):
     """Gets and uploads all information from the game at the given box ID."""
     box_soup = scrape_box_score(scraper, box_id, by_pbp=by_pbp)
     if box_soup is not None:
@@ -124,13 +127,10 @@ def scrape_game(scraper, cursor, box_id, by_pbp=False):
         location = find_location(box_soup)
         attendance = find_attendance(box_soup)
         referees = find_referees(box_soup)
-        h_team_season_id = None
-        a_team_season_id = None
-        h_name = None
-        a_name = None
-        is_exhibition = None
-        h_roster = download_roster(cursor, h_team_season_id)
-        a_roster = download_roster(cursor, a_team_season_id)
+        h_team_season_id, a_team_season_id, h_school_id, a_school_id = find_team_ids(box_soup)
+        h_name, a_name, is_exhibition = find_team_names_and_exhibition(box_soup)
+        h_roster = fetch_roster(cursor, h_team_season_id, h_school_id, season)
+        a_roster = fetch_roster(cursor, a_team_season_id, a_school_id, season)
         upload_game(cursor, pbp_id, h_team_season_id, a_team_season_id, h_name, a_name, game_time,
                     location, attendance, referees, is_exhibition)
 
@@ -140,7 +140,7 @@ def scrape_game(scraper, cursor, box_id, by_pbp=False):
 
         pbp_soup = scrape_plays(scraper, pbp_id)
         if pbp_soup is not None:
-            raw_plays = find_raw_plays(box_soup, pbp_id)
+            raw_plays = find_raw_plays(pbp_soup, pbp_id)
             plays = parse_all_plays(raw_plays)
             track_shot_clock(plays)
             track_partic(plays)
@@ -281,6 +281,50 @@ def find_referees(soup):
         return [referee1, referee2, referee3]
     else:
         return [None] * 3
+
+
+def find_team_ids(soup):
+    """Given a soup of the box score of a game, find the team season IDs or school IDs of each
+    team. Only one will be listed for each team and I can't predict when it's whach way. Returns a
+    tuple in the format (h_team_season_id, h_school_id, a_team_season_id, a_school_id)."""
+    el_table = soup.find('table', class_='mytable')
+    el_h_link = el_table.find_all('tr')[2].find('a')
+    el_a_link = el_table.find_all('tr')[1].find('a')
+    h_team_season_id = None
+    h_school_id = None
+    a_team_season_id = None
+    a_school_id = None
+    if el_h_link is not None:
+        h_url = el_h_link.attrs['href']
+        if "teams" in h_url:
+            h_team_season_id = int(h_url[h_url.rfind("/") + 1:])
+        else:
+            h_school_id = int(h_url[6:h_url.rfind("/")])
+    if el_a_link is not None:
+        a_url = el_a_link.attrs['href']
+        if "teams" in a_url:
+            a_team_season_id = int(a_url[a_url.rfind("/") + 1:])
+        else:
+            a_school_id = int(a_url[6:a_url.rfind("/")])
+    return h_team_season_id, a_team_season_id, h_school_id, a_school_id
+
+
+def find_team_names_and_exhibition(soup):
+    """Given a soup of the box score of a game, find the names of each team and whether the game
+    was an exhibition. Returns a tuple in the format (h_name, a_name, is_exhibition)."""
+    is_exhibition = False
+    el_headings = soup.find_all('tr', class_='heading')
+    h_name = el_headings[1].get_text()
+    a_name = el_headings[0].get_text()
+    h_index_italics = h_name.find(" <i>")
+    if h_index_italics >= 0:
+        h_name = h_name[:h_index_italics]
+        is_exhibition = True
+    a_index_italics = a_name.find(" <i>")
+    if a_index_italics >= 0:
+        a_name = a_name[:a_index_italics]
+        is_exhibition = True
+    return h_name, a_name, is_exhibition
 
 
 def find_raw_boxes(soup):
@@ -501,9 +545,13 @@ def score_name_similarity(name1, name2):
 # Below are functions for interacting with the database.
 
 
-def download_roster(cursor, team_season_id):
-    """Get the player ID and name of each player on the team with the given team_season_id."""
-    cursor.execute(GET_ROSTER_QUERY, (team_season_id,))
+def fetch_roster(cursor, team_season_id, school_id, year):
+    """Get the player ID and name of each player on the team with the given team season ID or the
+    given school ID and year."""
+    if team_season_id is None:
+        cursor.execute(FETCH_TEAM_SEASON_ID_QUERY, (school_id, year))
+        team_season_id = cursor.fetchone()['team_season_id']
+    cursor.execute(FETCH_ROSTER_QUERY, (team_season_id,))
     return cursor.fetchall()
 
 
