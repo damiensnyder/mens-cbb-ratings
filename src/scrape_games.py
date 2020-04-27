@@ -316,6 +316,9 @@ def find_names_and_exhibition(soup):
     el_headings = soup.find_all('tr', class_='heading')
     h_name = el_headings[1].get_text()
     a_name = el_headings[0].get_text()
+
+    # exhibition games have a telltale string starting with "<i>" after the team's name. remove
+    # that if present and note that it is an exhibition game
     h_index_italics = h_name.find(" <i>")
     if h_index_italics >= 0:
         h_name = h_name[:h_index_italics]
@@ -662,7 +665,7 @@ def parse_play_row(play_row):
         parsed_play['is away'] = is_away
 
         return parsed_play
-    
+
 
 def parse_play(play):
     """Parse only the text of the play and return as a dict."""
