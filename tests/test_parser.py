@@ -8,8 +8,8 @@ correct_box_values = {
         'location': "Doug Collins Court at Redbird Arena",
         'attendance': 4764,
         'referees': ["Mike O'Neill", "Roland Simmons", "Greg Rennegarbe"],
-        'team IDs': [450575, 450811, None, None],
-        'team names': ["Illinois St.", "FGCU", False],
+        'team IDs': (450575, 450811, None, None),
+        'team names': ("Illinois St.", "FGCU", False),
         'raw box 1': [1853705, True, 'Carlyle, Christian', '*', '1', '33:00', '1', '3', '', '1',
                       '3', '4', '5', '2', '7', '9', '2', '4', '', '', '3', '']
     },
@@ -19,8 +19,8 @@ correct_box_values = {
         'location': "Elmore Gymnasium",
         'attendance': 898,
         'referees': [None] * 3,
-        'team IDs': [450575, 450811, None, None],
-        'team names': ["Illinois St.", "FGCU", False],
+        'team IDs': (None, None, 6, 314),
+        'team names': ("Alabama A&M", "Jackson St.", False),
         'raw box 1': [2099975, True, 'Howell, Chris', '', '1', '38:00', '8', '20', '', '3', '1',
                       '2', '17', '4', '10', '14', '', '2', '2', '', '2']
     },
@@ -30,8 +30,8 @@ correct_box_values = {
         'location': None,
         'attendance': 5251,
         'referees': [None] * 3,
-        'team IDs': [None, None, 639, 220],
-        'team names': ["Siena", "Fairfield", False],
+        'team IDs': (None, None, 639, 220),
+        'team names': ("Siena", "Fairfield", False),
         'raw box 1': [1968272, True, 'Cruz, Jesus', 'G', '1', '30:43', '2', '9', '', '3', '1',
                       '1', '5', '3', '2', '5', '3', '2', '', '', '3']
     },
@@ -41,8 +41,8 @@ correct_box_values = {
         'location': "Princess Anne, Md. (Hytche Center)",
         'attendance': 361,
         'referees': ["Que'z Crawford", "Zakee Cook", "La'Kenneth Kindred"],
-        'team IDs': [None, None, 393, None],
-        'team names': ["UMES", "Central Penn", False],
+        'team IDs': (None, None, 393, None),
+        'team names': ("UMES", "Central Penn", False),
         'raw box 1': [None, True, 'BAYLOR, Noah', '*', '1', '26:00', '4', '4', '', '', '3', '4',
                       '11', '2', '5', '7', '1', '2', '', '', '3']
     }
@@ -83,11 +83,11 @@ def test_find_referees(soup, correct_referees):
 
 
 def test_find_team_ids(soup, correct_team_ids):
-    pass
+    assert sg.find_team_ids(soup) == correct_team_ids
 
 
 def test_find_names_and_exhibition(soup, correct_team_names):
-    pass
+    assert sg.find_names_and_exhibition(soup) == correct_team_names
 
 
 def test_find_raw_boxes(soup, correct_raw_box_1):
@@ -150,9 +150,6 @@ def test_clean_stat():
     assert sg.clean_stat("23") == 23
 
 
-# Below are functions that test functions for parsing plays from play-by-play logs.
-
-
 def test_clean_centi_time():
     """Tests relevant cases of clean_centi_time."""
     assert sg.clean_centi_time('11:12') == 672
@@ -162,6 +159,12 @@ def test_clean_centi_time():
     assert sg.clean_centi_time('00:12:63') == 12.63
     assert sg.clean_centi_time('00:02:63') == 2.63
     assert sg.clean_centi_time('00:02:03') == 2.03
+
+
+# Below are functions that test functions for parsing plays from play-by-play logs.
+
+
+# Main method.
 
 
 def main():
@@ -186,9 +189,6 @@ def main():
             test_find_team_ids(soup, correct_box_values[box_id]['team IDs'])
             test_find_names_and_exhibition(soup, correct_box_values[box_id]['team names'])
             test_find_raw_boxes(soup, correct_box_values[box_id]['raw box 1'])
-
-
-### ACTUAL STUFF ###
 
 
 if __name__ == '__main__':

@@ -324,7 +324,7 @@ def find_names_and_exhibition(soup):
     if a_index_italics >= 0:
         a_name = a_name[:a_index_italics]
         is_exhibition = True
-    return h_name, a_name, is_exhibition
+    return h_name.strip(), a_name.strip(), is_exhibition
 
 
 def find_raw_boxes(soup):
