@@ -1,5 +1,6 @@
 import src.scrape_games as sg
 from bs4 import BeautifulSoup as bs
+import pymysql
 
 correct_box_values = {
     1602674: {
@@ -96,6 +97,14 @@ def test_find_raw_boxes(soup, correct_raw_box_1):
     return given_raw_box_1
 
 
+# Below are functions that test functions that connect to the database.
+
+
+def test_connect_to_db():
+    conn = sg.connect_to_db()
+    assert isinstance(conn, pymysql.connections.Connection)
+
+
 # Below are functions that test the functions used to clean the raw data extracted from NCAA
 # webpages.
 
@@ -168,6 +177,8 @@ def test_clean_centi_time():
 
 
 def main():
+    test_connect_to_db()
+
     test_clean_name()
     test_clean_position()
     test_clean_time()
