@@ -26,13 +26,13 @@ CLOCK_RESETTING_ACTIONS = ["jump ball", "possession arrow", "shot", "turnover", 
 
 UPLOAD_GAME_QUERY = "INSERT INTO games (game_id, h_team_season_id, a_team_season_id, h_name," \
                     "a_name, start_time, location, attendance, referee1, referee2, referee3," \
-                    "is_exhibition) VALUES (%i, %i, %i, %s, %s, %d, %s, %i, %s, %s, %s, %i);"
+                    "is_exhibition) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);"
 NULLABLE_BOX_FIELDS = ["player ID", "name", "is away", "position", "time played", "FGM", "FGA",
                        "3PM", "3PA", "FTM", "FTA", "ORB", "DRB", "AST", "TOV", "STL", "BLK", "PF"]
 UPLOAD_BOX_QUERY = "INSERT INTO boxes (game_id, box_in_game, player_id, player_name, is_away," \
                    "position, time_played, fgm, fga, 3pm, 3pa, ftm, fta, orb, drb, ast, tov, stl" \
-                   "blk, pf) VALUES (%i, %i, %s, %s, %i, %s, %i, %i, %i, %i, %i, %i, %i, %i, %i," \
-                   "%i, %i, %i, %i, %i);"
+                   "blk, pf) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s," \
+                   "%s, %s, %s, %s, %s);"
 NULLABLE_PLAY_FIELDS = ["period", "time", "shot clock", "home score", "away score", "is away",
                         "action", "flag 1", "flag 2", "flag 3", "flag 4", "flag 5", "flag 6"]
 UPLOAD_PLAY_QUERY = "INSERT INTO plays (game_id, play_in_game, period, time_remaining," \
@@ -40,14 +40,14 @@ UPLOAD_PLAY_QUERY = "INSERT INTO plays (game_id, play_in_game, period, time_rema
                     "flag4, flag5, flag6, agent_id, agent_name, h_p1_id, h_p1_name, h_p2_id," \
                     "h_p2_name, h_p3_id, h_p3_name, h_p4_id, h_p4_name, h_p5_id, h_p5_name," \
                     "a_p1_id, a_p1_name, a_p2_id, a_p2_name, a_p3_id, a_p3_name, a_p4_id," \
-                    "a_p4_name, a_p5_id, a_p5_name) VALUES (%i, %i, %i, %i, %i, %i, %i, %s," \
-                    "%s, %s, %i, %i, %i, %i, %i, %s, %i, %s, %i, %s, %i, %s, %i, %s, %i, %s," \
-                    "%i, %s, %i, %s, %i, %s, %i, %s, %i, %s, %i, %s"
-FETCH_TEAM_SEASON_ID_QUERY = "SELECT (team_season_id) FROM team_seasons WHERE school_id = %i AND" \
-                             "season_year = %i"
-FETCH_DIVISION_CODE_QUERY = "SELECT division_code FROM seasons WHERE year = %i"
+                    "a_p4_name, a_p5_id, a_p5_name) VALUES (%s, %s, %s, %s, %s, %s, %s, %s," \
+                    "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s," \
+                    "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s"
+FETCH_TEAM_SEASON_ID_QUERY = "SELECT (team_season_id) FROM team_seasons WHERE school_id = %s AND" \
+                             "season_year = %s"
+FETCH_DIVISION_CODE_QUERY = "SELECT division_code FROM seasons WHERE year = %s"
 FETCH_ROSTER_QUERY = "SELECT (player_id, player_name) FROM player_seasons WHERE team_season_id =" \
-                     "%i"
+                     "%s"
 
 
 # Below are functions for scraping game information from stats.ncaa.org.
@@ -563,7 +563,7 @@ def fetch_division_code(cursor, year):
     """Get the player ID and name of each player on the team with the given team season ID or the
     given school ID and year."""
     cursor.execute(FETCH_DIVISION_CODE_QUERY, (year,))
-    return cursor.fetchone()['division_code']
+    return cursor.fetchone()[0]
 
 
 def fetch_roster(cursor, team_season_id, school_id, year):
@@ -576,7 +576,8 @@ def fetch_roster(cursor, team_season_id, school_id, year):
             cursor.execute(FETCH_TEAM_SEASON_ID_QUERY, (school_id, year))
             team_season_id = cursor.fetchone()['team_season_id']
     cursor.execute(FETCH_ROSTER_QUERY, (team_season_id,))
-    return cursor.fetchall()
+    raw_roster = cursor.fetchall()
+    return [{'player ID': player[0], 'name': player[1]} for player in raw_roster]
 
 
 def upload_game(cursor, game_id, h_team_season_id, a_team_season_id, h_name, a_name, start_time,

@@ -103,6 +103,11 @@ def test_find_raw_boxes(soup, correct_raw_box_1):
 def test_connect_to_db():
     conn = sg.connect_to_db()
     assert isinstance(conn, pymysql.connections.Connection)
+    return conn
+
+
+def test_fetch_division_code(cursor):
+    assert sg.fetch_division_code(cursor, 2019) == 16700
 
 
 # Below are functions that test the functions used to clean the raw data extracted from NCAA
@@ -177,7 +182,9 @@ def test_clean_centi_time():
 
 
 def main():
-    test_connect_to_db()
+    conn = test_connect_to_db()
+    cursor = conn.cursor()
+    test_fetch_division_code(cursor)
 
     test_clean_name()
     test_clean_position()
