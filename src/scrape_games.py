@@ -56,7 +56,7 @@ def scrape_range(start_year, start_month, start_day, end_year, end_month, end_da
     """Scrape each game from the start date (inclusive) to the end date (exclusive) and upload
     the results to the database."""
     scraper = Scraper(thread_count=DEFAULT_THREAD_COUNT, verbose=VERBOSE)
-    conn = pymysql.connect('localhost', '', '', 'mens_cbb_ratings')
+    conn = connect_to_db()
     cursor = conn.cursor()
 
     # make the dates into datetime objects
@@ -543,6 +543,16 @@ def score_name_similarity(name1, name2):
 
 
 # Below are functions for interacting with the database.
+
+
+def connect_to_db():
+    """Open and return a connection to the database as specified in a txt file."""
+    with open('db_info.txt', 'r') as db_info_file:
+        host = db_info_file.readline()
+        user = db_info_file.readline()
+        password = db_info_file.readline()
+        db = db_info_file.readline()
+    return pymysql.connect(host, user, password, db)
 
 
 def fetch_roster(cursor, team_season_id, school_id, year):
