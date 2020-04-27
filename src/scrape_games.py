@@ -129,8 +129,8 @@ def scrape_game(scraper, cursor, box_id, by_pbp=False):
         h_name = None
         a_name = None
         is_exhibition = None
-        h_roster = get_roster(cursor, h_team_season_id)
-        a_roster = get_roster(cursor, a_team_season_id)
+        h_roster = download_roster(cursor, h_team_season_id)
+        a_roster = download_roster(cursor, a_team_season_id)
         upload_game(cursor, pbp_id, h_team_season_id, a_team_season_id, h_name, a_name, game_time,
                     location, attendance, referees, is_exhibition)
 
@@ -501,7 +501,7 @@ def score_name_similarity(name1, name2):
 # Below are functions for interacting with the database.
 
 
-def get_roster(cursor, team_season_id):
+def download_roster(cursor, team_season_id):
     """Get the player ID and name of each player on the team with the given team_season_id."""
     cursor.execute(GET_ROSTER_QUERY, (team_season_id,))
     return cursor.fetchall()
