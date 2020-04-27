@@ -12,3 +12,6 @@ cbr
 *.html
 src/rosters_to_db.py
 src/scrape_rosters.py
+src/manual_analysis.py
+src/parse_games.py
+src/games_to_counts.py
