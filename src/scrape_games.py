@@ -444,6 +444,8 @@ def clean_name(name):
     space after the comma. If there is no comma, returns the name as is. Names with extra commas
     like 'Last, Jr., First' rearrange to 'First Last, Jr.'"""
     name = re.sub('[^\x00-\x7f]', '', name)     # remove any non-ASCII characters
+    while "  " in name:                         # remove double spaces
+        name = name.replace("  ", " ")
     index_last_comma = name.rfind(',')
     if (index_last_comma > 0) and (index_last_comma < len(name) - 1):
         if name[index_last_comma + 1] == " ":

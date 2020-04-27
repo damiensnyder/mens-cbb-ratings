@@ -1,8 +1,7 @@
-### IMPORTS ###
-
-
+import pymysql
 from src.scrape_util import Scraper
 from time import sleep
+import re
 
 
 ### CONSTANTS ###
@@ -59,6 +58,10 @@ ALL_TEAMS_2019 = [450588, 450603, 450633, 450674, 450627, 450467, 450496, 450546
 
 PATH_METADATA = "out/raw_team_metadata.csv"
 PATH_PLAYERS = "out/raw_players.csv"
+
+UPLOAD_PLAYER_QUERY = "INSERT INTO player_seasons (team_season_id, player_id, season_year," \
+                      "player_name, eligibility_year, position, height, jersey_number)" \
+                      "VALUES (%s, %s, %s, %s, %s, %s, %s, %s);"
 
 
 ### CLASSES ###
@@ -297,14 +300,61 @@ def upload_team_season(cursor, team_season_id, school_id, season_year, coach_nam
     )
 
 
+def clean_name(name):
+    """Rearrange the given name from 'Last, First' to 'First Last'. Also accepts names without the
+    space after the comma. If there is no comma, returns the name as is. Names with extra commas
+    like 'Last, Jr., First' rearrange to 'First Last, Jr.'"""
+    name = re.sub('[^\x00-\x7f]', '', name)     # remove any non-ASCII characters
+    while "  " in name:
+        name = name.replace("  ", " ")
+    index_last_comma = name.rfind(',')
+    if (index_last_comma > 0) and (index_last_comma < len(name) - 1):
+        if name[index_last_comma + 1] == " ":
+            return name[index_last_comma + 2:] + " " + name[:index_last_comma]
+        else:
+            return name[index_last_comma + 1:] + " " + name[:index_last_comma]
+    else:
+        return name
+
+
+def clean_height(height):
+    index_dash = height.find("-")
+    try:
+        if index_dash == 1:
+            int_height = 12 * int(height[0]) + int(height[2:])
+            # some players are listed as 4-foot-0. they are definitely not 4-foot-0.
+            if int_height >= 50:
+                return int_height
+            else:
+                return None
+    except IndexError:
+        return None
+    except ValueError:
+        return None
+
+
 def upload_player_season(cursor, team_season_id, player_id, season_year, player_name,
                          eligibility_year, position, height, jersey_number):
-    cursor.execute(
-        f"""INSERT INTO player_seasons (team_season_id, player_id, season_year, player_name,
-                                        eligibility_year, position, height, jersey_number)
-            VALUES ('{team_season_id}', '{player_id}', '{season_year}', '{player_name}',
-                    '{eligibility_year}', '{position}', '{height}', '{jersey_number}');"""
-    )
+    player_name = clean_name(player_name)
+    height = clean_height(height)
+    if position not in ["G", "F", "C"]:
+        position = None
+    try:
+        jersey_number = int(jersey_number)
+    except ValueError:
+        jersey_number = None
+    team_season_id = int(team_season_id)
+    player_id = int(player_id)
+    if player_id == -1:
+        player_id = None
+    if eligibility_year not in ["Fr", "So", "Jr", "Sr"]:
+        eligibility_year = None
+    player_tuple = (team_season_id, player_id, season_year, player_name, eligibility_year,
+                    position, height, jersey_number)
+    try:
+        cursor.execute(UPLOAD_PLAYER_QUERY, player_tuple)
+    except pymysql.err.IntegrityError:
+        print(player_tuple)
 
 
 ### ACTUAL STUFF ###
