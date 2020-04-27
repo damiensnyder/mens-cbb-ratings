@@ -8,8 +8,10 @@ correct_box_values = {
         'location': "Doug Collins Court at Redbird Arena",
         'attendance': 4764,
         'referees': ["Mike O'Neill", "Roland Simmons", "Greg Rennegarbe"],
-        'raw box 1': [1853705, True, 'Carlyle, Christian', '*', '1', '33:00', '1', '3', '', '1', '3', '4', '5', '2',
-                      '7', '9', '2', '4', '', '', '3', '']
+        'team IDs': [450575, 450811, None, None],
+        'team names': ["Illinois St.", "FGCU", False],
+        'raw box 1': [1853705, True, 'Carlyle, Christian', '*', '1', '33:00', '1', '3', '', '1',
+                      '3', '4', '5', '2', '7', '9', '2', '4', '', '', '3', '']
     },
     1610092: {
         'pbp ID': 4738602,
@@ -17,8 +19,10 @@ correct_box_values = {
         'location': "Elmore Gymnasium",
         'attendance': 898,
         'referees': [None] * 3,
-        'raw box 1': [2099975, True, 'Howell, Chris', '', '1', '38:00', '8', '20', '', '3', '1', '2', '17', '4', '10',
-                      '14', '', '2', '2', '', '2']
+        'team IDs': [450575, 450811, None, None],
+        'team names': ["Illinois St.", "FGCU", False],
+        'raw box 1': [2099975, True, 'Howell, Chris', '', '1', '38:00', '8', '20', '', '3', '1',
+                      '2', '17', '4', '10', '14', '', '2', '2', '', '2']
     },
     1614866: {
         'pbp ID': 4696618,
@@ -26,8 +30,21 @@ correct_box_values = {
         'location': None,
         'attendance': 5251,
         'referees': [None] * 3,
-        'raw box 1': [1968272, True, 'Cruz, Jesus', 'G', '1', '30:43', '2', '9', '', '3', '1', '1', '5', '3', '2', '5',
-                      '3', '2', '', '', '3']
+        'team IDs': [None, None, 639, 220],
+        'team names': ["Siena", "Fairfield", False],
+        'raw box 1': [1968272, True, 'Cruz, Jesus', 'G', '1', '30:43', '2', '9', '', '3', '1',
+                      '1', '5', '3', '2', '5', '3', '2', '', '', '3']
+    },
+    1605562: {
+        'pbp ID': 4666158,
+        'game time': "2018/11/24 16:00",
+        'location': "Princess Anne, Md. (Hytche Center)",
+        'attendance': 361,
+        'referees': ["Que'z Crawford", "Zakee Cook", "La'Kenneth Kindred"],
+        'team IDs': [None, None, 393, None],
+        'team names': ["UMES", "Central Penn", False],
+        'raw box 1': [None, True, 'BAYLOR, Noah', '*', '1', '26:00', '4', '4', '', '', '3', '4',
+                      '11', '2', '5', '7', '1', '2', '', '', '3']
     }
 }
 correct_scoreboard_values = {
@@ -63,6 +80,14 @@ def test_find_attendance(soup, correct_attendance):
 
 def test_find_referees(soup, correct_referees):
     assert sg.find_referees(soup) == correct_referees
+
+
+def test_find_team_ids(soup, correct_team_ids):
+    pass
+
+
+def test_find_names_and_exhibition(soup, correct_team_names):
+    pass
 
 
 def test_find_raw_boxes(soup, correct_raw_box_1):
@@ -158,6 +183,8 @@ def main():
             test_find_location(soup, correct_box_values[box_id]['location'])
             test_find_attendance(soup, correct_box_values[box_id]['attendance'])
             test_find_referees(soup, correct_box_values[box_id]['referees'])
+            test_find_team_ids(soup, correct_box_values[box_id]['team IDs'])
+            test_find_names_and_exhibition(soup, correct_box_values[box_id]['team names'])
             test_find_raw_boxes(soup, correct_box_values[box_id]['raw box 1'])
 
 

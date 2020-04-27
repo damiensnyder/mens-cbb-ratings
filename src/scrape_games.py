@@ -128,7 +128,7 @@ def scrape_game(scraper, cursor, season, box_id, by_pbp=False):
         attendance = find_attendance(box_soup)
         referees = find_referees(box_soup)
         h_team_season_id, a_team_season_id, h_school_id, a_school_id = find_team_ids(box_soup)
-        h_name, a_name, is_exhibition = find_team_names_and_exhibition(box_soup)
+        h_name, a_name, is_exhibition = find_names_and_exhibition(box_soup)
         h_roster = fetch_roster(cursor, h_team_season_id, h_school_id, season)
         a_roster = fetch_roster(cursor, a_team_season_id, a_school_id, season)
         upload_game(cursor, pbp_id, h_team_season_id, a_team_season_id, h_name, a_name, game_time,
@@ -309,7 +309,7 @@ def find_team_ids(soup):
     return h_team_season_id, a_team_season_id, h_school_id, a_school_id
 
 
-def find_team_names_and_exhibition(soup):
+def find_names_and_exhibition(soup):
     """Given a soup of the box score of a game, find the names of each team and whether the game
     was an exhibition. Returns a tuple in the format (h_name, a_name, is_exhibition)."""
     is_exhibition = False
@@ -559,8 +559,11 @@ def fetch_roster(cursor, team_season_id, school_id, year):
     """Get the player ID and name of each player on the team with the given team season ID or the
     given school ID and year."""
     if team_season_id is None:
-        cursor.execute(FETCH_TEAM_SEASON_ID_QUERY, (school_id, year))
-        team_season_id = cursor.fetchone()['team_season_id']
+        if school_id is None:
+            return []   # return an empty list if the team is has no ID of either type
+        else:
+            cursor.execute(FETCH_TEAM_SEASON_ID_QUERY, (school_id, year))
+            team_season_id = cursor.fetchone()['team_season_id']
     cursor.execute(FETCH_ROSTER_QUERY, (team_season_id,))
     return cursor.fetchall()
 
