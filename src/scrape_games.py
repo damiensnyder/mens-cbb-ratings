@@ -32,15 +32,15 @@ UPLOAD_BOX_QUERY = "INSERT INTO boxes (game_id, box_in_game, player_id, player_n
                    "%i, %i, %i, %i, %i);"
 
 NULLABLE_PLAY_FIELDS = ["period", "time", "shot clock", "home score", "away score", "is away",
-                        "action", "flag 1", "flag 2", "flag 3", "flag 4", "flag 5", "flag 6",
-                        "agent name", "agent ID"]
+                        "action", "flag 1", "flag 2", "flag 3", "flag 4", "flag 5", "flag 6"]
 UPLOAD_PLAY_QUERY = "INSERT INTO plays (game_id, play_in_game, period, time_remaining," \
                     "shot_clock, h_score, a_score, agent_is_away, action, flag1, flag2, flag3," \
-                    "flag4, flag5, flag6, agent_id, agent_name, h_id1, h_name1, h_id2, h_name2," \
-                    "h_id3, h_name3, h_id4, h_name4, h_id5, h_name5, a_id1, a_name1, a_id2," \
-                    "a_name2, a_id3, a_name3, a_id4, a_name4, a_id5, a_name5) VALUES (%i, %i," \
-                    "%i, %i, %i, %i, %i, %s, %s, %s, %i, %i, %i, %i, %i, %s, %i, %s, %i, %s," \
-                    "%i, %s, %i, %s, %i, %s, %i, %s, %i, %s, %i, %s, %i, %s, %i, %s, %i, %s"
+                    "flag4, flag5, flag6, agent_id, agent_name, h_p1_id, h_p1_name, h_p2_id," \
+                    "h_p2_name, h_p3_id, h_p3_name, h_p4_id, h_p4_name, h_p5_id, h_p5_name," \
+                    "a_p1_id, a_p1_name, a_p2_id, a_p2_name, a_p3_id, a_p3_name, a_p4_id," \
+                    "a_p4_name, a_p5_id, a_p5_name) VALUES (%i, %i, %i, %i, %i, %i, %i, %s," \
+                    "%s, %s, %i, %i, %i, %i, %i, %s, %i, %s, %i, %s, %i, %s, %i, %s, %i, %s," \
+                    "%i, %s, %i, %s, %i, %s, %i, %s, %i, %s, %i, %s"
 
 
 # Below are functions for scraping game information from stats.ncaa.org.
@@ -547,6 +547,12 @@ def upload_play(cursor, game_id, plays):
         play_tuple = (game_id, i)
         for field in NULLABLE_PLAY_FIELDS:
             play_tuple += (play[field],)
+
+        play_tuple += (play['agent']['player ID'], play['agent']['name'])
+        for player in play['h partic']:
+            play_tuple += (player['player ID'], player['name'])
+        for player in play['a partic']:
+            play_tuple += (player['player ID'], player['name'])
 
         cursor.execute(UPLOAD_BOX_QUERY, play_tuple)
         i += 1
