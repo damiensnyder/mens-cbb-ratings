@@ -45,6 +45,7 @@ UPLOAD_PLAY_QUERY = "INSERT INTO plays (game_id, play_in_game, period, time_rema
                     "%i, %s, %i, %s, %i, %s, %i, %s, %i, %s, %i, %s"
 FETCH_TEAM_SEASON_ID_QUERY = "SELECT (team_season_id) FROM team_seasons WHERE school_id = %i AND" \
                              "season_year = %i"
+FETCH_DIVISION_ID_QUERY = "SELECT division_code FROM seasons WHERE year = %i"
 FETCH_ROSTER_QUERY = "SELECT (player_id, player_name) FROM player_seasons WHERE team_season_id =" \
                      "%i"
 
@@ -550,12 +551,19 @@ def score_name_similarity(name1, name2):
 
 def connect_to_db():
     """Open and return a connection to the database as specified in a txt file."""
-    with open('db_info.txt', 'r') as db_info_file:
+    with open('src/db_info.txt', 'r') as db_info_file:
         host = db_info_file.readline()
         user = db_info_file.readline()
         password = db_info_file.readline()
         db = db_info_file.readline()
     return pymysql.connect(host, user, password, db)
+
+
+def fetch_division_code(cursor, year):
+    """Get the player ID and name of each player on the team with the given team season ID or the
+    given school ID and year."""
+    cursor.execute(FETCH_DIVISION_ID_QUERY, (year,))
+    return cursor.fetchone()['division_code']
 
 
 def fetch_roster(cursor, team_season_id, school_id, year):
