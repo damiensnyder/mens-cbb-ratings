@@ -24,13 +24,15 @@ YEAR_DIVISIONS = [
 CLOCK_RESETTING_ACTIONS = ["jump ball", "possession arrow", "shot", "turnover", "steal",
                            "foul committed", "free throw"]
 
+UPLOAD_GAME_QUERY = "INSERT INTO games (game_id, h_team_season_id, a_team_season_id, h_name," \
+                    "a_name, start_time, location, attendance, referee1, referee2, referee3," \
+                    "is_exhibition) VALUES (%i, %i, %i, %s, %s, %d, %s, %i, %s, %s, %s, %i);"
 NULLABLE_BOX_FIELDS = ["player ID", "name", "is away", "position", "time played", "FGM", "FGA",
                        "3PM", "3PA", "FTM", "FTA", "ORB", "DRB", "AST", "TOV", "STL", "BLK", "PF"]
 UPLOAD_BOX_QUERY = "INSERT INTO boxes (game_id, box_in_game, player_id, player_name, is_away," \
                    "position, time_played, fgm, fga, 3pm, 3pa, ftm, fta, orb, drb, ast, tov, stl" \
                    "blk, pf) VALUES (%i, %i, %s, %s, %i, %s, %i, %i, %i, %i, %i, %i, %i, %i, %i," \
                    "%i, %i, %i, %i, %i);"
-
 NULLABLE_PLAY_FIELDS = ["period", "time", "shot clock", "home score", "away score", "is away",
                         "action", "flag 1", "flag 2", "flag 3", "flag 4", "flag 5", "flag 6"]
 UPLOAD_PLAY_QUERY = "INSERT INTO plays (game_id, play_in_game, period, time_remaining," \
@@ -41,13 +43,15 @@ UPLOAD_PLAY_QUERY = "INSERT INTO plays (game_id, play_in_game, period, time_rema
                     "a_p4_name, a_p5_id, a_p5_name) VALUES (%i, %i, %i, %i, %i, %i, %i, %s," \
                     "%s, %s, %i, %i, %i, %i, %i, %s, %i, %s, %i, %s, %i, %s, %i, %s, %i, %s," \
                     "%i, %s, %i, %s, %i, %s, %i, %s, %i, %s, %i, %s"
+GET_ROSTER_QUERY = "SELECT (player_id, player_name) FROM player_seasons WHERE team_season_id = %i"
 
 
 # Below are functions for scraping game information from stats.ncaa.org.
 
 
 def scrape_range(start_year, start_month, start_day, end_year, end_month, end_day):
-    """Get each day in the range [start_date, end_date) and write all the results to file."""
+    """Scrape each game from the start date (inclusive) to the end date (exclusive) and upload
+    the results to the database."""
     scraper = Scraper(thread_count=DEFAULT_THREAD_COUNT, verbose=VERBOSE)
     conn = pymysql.connect('localhost', '', '', 'mens_cbb_ratings')
     cursor = conn.cursor()
@@ -72,6 +76,7 @@ def scrape_range(start_year, start_month, start_day, end_year, end_month, end_da
 
         # scrape all games from that day
         scrape_day(scraper, cursor, month, day, year, season_code)
+        conn.commit()
 
     scraper.log("Finished scraping all days in range.", 0)
 
@@ -119,16 +124,28 @@ def scrape_game(scraper, cursor, box_id, by_pbp=False):
         location = find_location(box_soup)
         attendance = find_attendance(box_soup)
         referees = find_referees(box_soup)
-        upload_game(cursor, pbp_id, None, None, None, None, game_time,
-                    location, attendance, referees, None)
+        h_team_season_id = None
+        a_team_season_id = None
+        h_name = None
+        a_name = None
+        is_exhibition = None
+        h_roster = get_roster(cursor, h_team_season_id)
+        a_roster = get_roster(cursor, a_team_season_id)
+        upload_game(cursor, pbp_id, h_team_season_id, a_team_season_id, h_name, a_name, game_time,
+                    location, attendance, referees, is_exhibition)
 
         raw_boxes = find_raw_boxes(box_soup)
-        boxes = clean_raw_boxes(raw_boxes, None, None)
-        upload_box(cursor, boxes)
+        boxes = clean_raw_boxes(raw_boxes, h_roster, a_roster)
+        upload_boxes(cursor, boxes)
 
         pbp_soup = scrape_plays(scraper, pbp_id)
         if pbp_soup is not None:
             raw_plays = find_raw_plays(box_soup, pbp_id)
+            plays = parse_all_plays(raw_plays)
+            track_shot_clock(plays)
+            track_partic(plays)
+            correct_minutes(boxes, plays)
+            upload_plays(cursor, pbp_id, plays)
 
 
 def scrape_box_score(scraper, box_id, by_pbp=False):
@@ -411,7 +428,7 @@ def identify_player(player_id, name, roster):
         # if there is an exactly matching name or player ID, return that player, or otherwise
         # choose the player with the most similar name
         for player in roster:
-            if (player_id == player[0]) or (name == player[1]):
+            if (player_id == player['player_id']) or (name == player['name']):
                 most_similar = player
                 break
             else:
@@ -481,71 +498,51 @@ def score_name_similarity(name1, name2):
     return similarity
 
 
-# Below are functions for uploading files to the database.
+# Below are functions for interacting with the database.
+
+
+def get_roster(cursor, team_season_id):
+    """Get the player ID and name of each player on the team with the given team_season_id."""
+    cursor.execute(GET_ROSTER_QUERY, (team_season_id,))
+    return cursor.fetchall()
 
 
 def upload_game(cursor, game_id, h_team_season_id, a_team_season_id, h_name, a_name, start_time,
                 location, attendance, referees, is_exhibition):
     """Assert that fields that are required not to be null in the database are not null, and
-    replace any other null fields with the string 'NULL'."""
-    assert (game_id is not None) and (h_name is not None) and (a_name is not None)
-    if h_team_season_id is None:
-        h_team_season_id = "NULL"
-    if a_team_season_id is None:
-        a_team_season_id = "NULL"
-    if start_time is None:
-        start_time = "NULL"
-    if location is None:
-        location = "NULL"
-    if attendance is None:
-        attendance = "NULL"
-    if referees is None:
-        referees = ["NULL"] * 3
-    referees = [referee for referee in referees if referee is not None]
-    while len(referees) < 3:  # in case there fewer than 3 non-null referees
-        referees.append("NULL")
-    if is_exhibition is None:
-        is_exhibition = "NULL"
-
-    cursor.execute(
-        f"INSERT INTO games (game_id, h_team_season_id, a_team_season_id, h_name, a_name,"
-        f"                   start_time, location, attendance, referees, is_exhibition)"
-        f"VALUES (`{game_id}`, `{h_team_season_id}`, `{a_team_season_id}`, `{h_name}`,"
-        f"        `{a_name}`, `{start_time}`, `{location}`, `{attendance}`, `{referees[0]}`,"
-        f"        `{referees[1]}`, `{referees[2]}`, `{is_exhibition}`);"
-    )
+    upload to database."""
+    assert (game_id is not None) and (h_name is not None) and (a_name is not None) \
+        and len(referees) == 3
+    game_tuple = (game_id, h_team_season_id, a_team_season_id, h_name, a_name, start_time,
+                  location, attendance, referees[0], referees[1], referees[2], is_exhibition)
+    cursor.execute(UPLOAD_GAME_QUERY, game_tuple)
 
 
-def upload_box(cursor, boxes):
-    """Assert that fields that are required not to be null in the database are not null, and
-    replace any other null fields with None. Upload the box to the database."""
+def upload_boxes(cursor, boxes):
+    """Assert that fields in each box that are required not to be null in the database are not
+    null and upload all boxes in the game to the database."""
     i = 0   # tracks which box it is in the game
     for box in boxes:
         assert 'PBP id' in box
+        box_tuple = (box['PBP id'], i)
         for field in NULLABLE_BOX_FIELDS:
             if field not in box:
                 box[field] = None   # replace nullable fields with None
-
-        box_tuple = (box['PBP id'], i)
-        for field in NULLABLE_BOX_FIELDS:
             box_tuple += (box[field],)
 
         cursor.execute(UPLOAD_BOX_QUERY, box_tuple)
         i += 1
 
 
-def upload_play(cursor, game_id, plays):
-    """Assert that fields that are required not to be null in the database are not null, and
-    replace any other null fields with the string 'NULL'. Except I'm not bothering with the ints
-    yet."""
+def upload_plays(cursor, game_id, plays):
+    """Assert that fields in each play that are required not to be null in the database are not
+    null and upload all plays in the game to the database."""
     i = 0   # tracks which play it is in the game
     for play in plays:
-        for field in NULLABLE_PLAY_FIELDS:
-            if field not in play:
-                play[field] = None   # replace nullable fields with None
-
         play_tuple = (game_id, i)
         for field in NULLABLE_PLAY_FIELDS:
+            if field not in play:
+                play[field] = None
             play_tuple += (play[field],)
 
         play_tuple += (play['agent']['player ID'], play['agent']['name'])
@@ -557,10 +554,21 @@ def upload_play(cursor, game_id, plays):
         cursor.execute(UPLOAD_BOX_QUERY, play_tuple)
         i += 1
 
-    cursor.execute(UPLOAD_PLAY_QUERY)
-
 
 # Below are functions for parsing a play from the play-by-play logs.
+
+
+def parse_all_plays(raw_plays):
+    """Parse all plays in the game, not adding any that are not real plays or cause errors."""
+    plays = []
+    for play_row in raw_plays:
+        try:
+            play = parse_play_row(play_row)
+            if play is not None:
+                plays.append(play)
+        except ValueError:
+            pass
+    return plays
 
 
 def parse_play_row(play_row):
@@ -1258,7 +1266,7 @@ def correct_minutes(boxes, plays):
             max_player = None
             max_minutes = None
 
-            for player in h_minutes:
+            for player in a_minutes:
                 if (player not in a_partic) \
                         and ((a_minutes[player] > max_minutes) or max_minutes is None):
                     max_player = player
@@ -1273,7 +1281,7 @@ def correct_minutes(boxes, plays):
             min_minutes = None
 
             for player in h_minutes:
-                if (player not in h_partic) \
+                if (player in h_partic) \
                         and ((h_minutes[player] < min_minutes) or min_minutes is None):
                     min_player = player
                     min_minutes = h_minutes[player]
@@ -1282,12 +1290,12 @@ def correct_minutes(boxes, plays):
             h_minutes[min_player] += time_diff
 
         # remove the players with the most extra plays from partic2 if there are more than 5
-        while len(h_partic) < 5:
+        while len(a_partic) < 5:
             min_player = None
             min_minutes = None
 
             for player in a_minutes:
-                if (player not in a_partic) \
+                if (player in a_partic) \
                         and ((a_minutes[player] < min_minutes) or min_minutes is None):
                     min_player = player
                     min_minutes = a_minutes[player]
