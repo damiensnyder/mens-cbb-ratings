@@ -55,10 +55,20 @@ FETCH_ROSTER_QUERY = "SELECT (player_id, player_name) FROM player_seasons WHERE 
 # Below are functions for scraping game information from stats.ncaa.org.
 
 
-def scrape_range(start_year, start_month, start_day, end_year, end_month, end_day):
-    """Scrape each game from the start date (inclusive) to the end date (exclusive) and upload
-    the results to the database."""
-    scraper = src.scrape_util.Scraper(thread_count=DEFAULT_THREAD_COUNT, verbose=VERBOSE)
+def scrape_range(start_year, start_month, start_day, end_year, end_month,
+                 end_day):
+    """Scrape each game in the given date range and upload the results to the
+    database.
+
+    Args:
+        start_year: The year of the first date of games to scrape, inclusive.
+        start_month: The month of the first date of games to scrape, inclusive.
+        start_day: The day of the first date of games to scrape, inclusive.
+        end_year: The year of the last date of games to scrape, exclusive.
+        end_month: The month of the last date of games to scrape, exclusive.
+        end_day: The day of the last date of games to scrape, exclusive."""
+    scraper = src.scrape_util.Scraper(thread_count=DEFAULT_THREAD_COUNT,
+                                      verbose=VERBOSE)
     conn = connect_to_db()
     cursor = conn.cursor()
 
@@ -70,7 +80,8 @@ def scrape_range(start_year, start_month, start_day, end_year, end_month, end_da
     season = start_year
     if start_month > 6:
         season += 1
-    season_code = [division['code'] for division in YEAR_DIVISIONS if division['year'] == season][0]
+    season_code = [division['code'] for division in YEAR_DIVISIONS
+                   if division['year'] == season][0]
 
     # iterate through each day in the date range
     while start_date < end_date:
@@ -81,23 +92,39 @@ def scrape_range(start_year, start_month, start_day, end_year, end_month, end_da
         start_date += datetime.timedelta(1)
 
         # scrape all games from that day
-        scrape_day(scraper, cursor, month, day, year, season, season_code)
+        scrape_day(scraper, cursor, year, month, day, season, season_code)
         conn.commit()
 
     scraper.log("Finished scraping all days in range.", 0)
 
 
-def scrape_day(scraper, cursor, month, day, year, season, season_code):
-    """Scrapes all games on the given date."""
+def scrape_day(scraper, cursor, year, month, day, season, season_code):
+    """Scrapes all games on the given date.
+
+    Args:
+        scraper: The src.scrape_util.Scraper object used to scrape webpages.
+        cursor: The pymysql cursor of the database connection.
+        year: The year of the date of games to scrape.
+        month: The month of the date of games to scrape.
+        day: The day of the date of games to scrape.
+        season: The year of the season that the date is in.
+        season_code: The stats.ncaa.org code of the season."""
     scraper.log(f"Started parsing day. (Date: {month}/{day}/{year})", 0)
-    box_ids = scrape_box_ids(scraper, month, day, year, season_code)
+    box_ids = scrape_box_ids(scraper, year, month, day, season_code)
     for box_id in box_ids:
         scrape_game(scraper, cursor, season, box_id)
     time.sleep(CRAWL_DELAY)
 
 
-def scrape_box_ids(scraper, month, day, year, season_code):
-    """Gets all box score IDs from games on the given date."""
+def scrape_box_ids(scraper, year, month, day, season_code):
+    """Gets all box score IDs from games on the given date.
+
+    Args:
+        scraper: The src.scrape_util.Scraper object used to scrape webpages.
+        year: The year of the date of games to scrape.
+        month: The month of the date of games to scrape.
+        day: The day of the date of games to scrape.
+        season_code: The stats.ncaa.org code of the season."""
     retries_left = MAX_RETRIES
     while retries_left > 0:
         # open the page
@@ -122,7 +149,15 @@ def scrape_box_ids(scraper, month, day, year, season_code):
 
 
 def scrape_game(scraper, cursor, season, box_id, by_pbp=False):
-    """Gets and uploads all information from the game at the given box ID."""
+    """Gets and uploads all information from the game at the given box ID.
+
+    Args:
+        scraper: The src.scrape_util.Scraper object used to scrape webpages.
+        cursor: The pymysql cursor of the database connection.
+        season: The year of the season in which the game was played.
+        box_id: The box ID of the game (or PBP ID, if by_pbp is True
+        by_pbp: True if the game is being scraped by PBP ID instead of box
+            ID."""
     box_soup = scrape_box_score(scraper, box_id, by_pbp=by_pbp)
     if box_soup is not None:
         pbp_id = find_pbp_id(box_soup)
@@ -152,7 +187,16 @@ def scrape_game(scraper, cursor, season, box_id, by_pbp=False):
 
 
 def scrape_box_score(scraper, box_id, by_pbp=False):
-    """Gets box score information for the game"""
+    """Gets box score information for the game.
+
+    Args:
+        scraper: The src.scrape_util.Scraper object used to scrape webpages.
+        box_id: The NCAA box ID of the game (or PBP ID, if by_pbp is True)
+        by_pbp: True if the game is identified by PBP ID instead of box ID.
+
+    Returns:
+        None if a viable soup could not be found; if a soup could be found,
+        returns a bs4.BeautifulSoup object of the box score webpage."""
     retries_left = MAX_RETRIES
     while retries_left > 0:
         # open the page
@@ -180,7 +224,15 @@ def scrape_box_score(scraper, box_id, by_pbp=False):
 
 
 def scrape_plays(scraper, pbp_id):
-    """Gets all plays from the game with the given PBP ID."""
+    """Gets all plays from the game with the given PBP ID.
+
+    Args:
+        scraper: The src.scrape_util.Scraper object used to scrape webpages.
+        pbp_id: The NCAA PBP ID of the game.
+
+    Returns:
+        None if a viable soup could not be found; if a soup could be found,
+        returns a bs4.BeautifulSoup object of the play-by-play webpage."""
     retries_left = MAX_RETRIES
     while retries_left > 0:
         # open the page
@@ -204,13 +256,20 @@ def scrape_plays(scraper, pbp_id):
         time.sleep(CRAWL_DELAY)
 
 
-# Below are functions dedicated to extracting information from BeautifulSoup representations of box
-# score webpages scraped from stats.ncaa.org. These functions do little or no pre-processing of the
-# values extracted.
+# Below are functions dedicated to extracting information from BeautifulSoup
+# representations of box score webpages scraped from stats.ncaa.org. These
+# functions do little or no pre-processing of the values extracted.
 
 
 def find_box_ids(soup):
-    """Given a scoreboard page, find the box IDs of every game played on that day."""
+    """Given a scoreboard page, find the box IDs of every game played on that day.
+
+    Args:
+        soup: A bs4.BeautifulSoup object of a stats.ncaa.org scoreboard
+            webpage.
+
+    Returns:
+        A list of the box IDs of all games listed on the scoreboard."""
     box_ids = []
     el_table = soup.find('table', attrs={'style': 'border-collapse: collapse'})
     for el_box_cell in el_table.find_all('tr', attrs={'style': 'border-bottom: 1px solid #cccccc'}):
@@ -224,18 +283,33 @@ def find_box_ids(soup):
 
 
 def find_pbp_id(soup):
-    """Given a box score page, find the PBP ID of the game."""
+    """Given a box score page, find the PBP ID of the game.
+
+    Args:
+        soup: A bs4.BeautifulSoup object of a stats.ncaa.org box score webpage.
+
+    Returns:
+        The PBP ID of the game."""
     el_pbp = soup.find('ul', class_='level1').find_all('li')[-5].find('a')
     return int(el_pbp.attrs['href'][-7:])
 
 
 def find_game_time(soup):
-    """Given a box score page, find the start time of the game."""
-    el_metadata = soup.find_all('table', attrs={'width': '50%', 'align': 'center'})[2]
+    """Given a box score page, find the start time of the game.
+
+    Args:
+        soup: A bs4.BeautifulSoup object of a stats.ncaa.org box score webpage.
+
+    Returns:
+        The start time of the game as a string in ISO-8601 format. If the time
+        is not listed, returns only the date, in ISO-8601 format."""
+    el_metadata = soup.find_all('table',
+                                attrs={'width': '50%', 'align': 'center'})[2]
     el_game_date = el_metadata.find('tr').find_all('td')[1]
     raw_date_text = el_game_date.get_text().strip()
 
-    # some dates have TBA instead of a specific time. does not return a time for those dates
+    # Some dates list TBA instead of a specific time. Does not return a time
+    # for those dates.
     if 'M' in raw_date_text:
         as_date = datetime.datetime.strptime(raw_date_text, '%m/%d/%Y %I:%M %p')
         return as_date.strftime('%Y/%m/%d %H:%M')
@@ -246,8 +320,13 @@ def find_game_time(soup):
 
 
 def find_location(soup):
-    """Given a box score page, find the location of the game, if it is listed. If it is not
-    listed, return None."""
+    """Given a box score page, find the location of the game, if it is listed.
+
+    Args:
+        soup: A bs4.BeautifulSoup object of a stats.ncaa.org box score webpage.
+
+    Returns:
+        The location of the game, if one is listed. Otherwise, returns None."""
     el_metadata = soup.find_all('table', attrs={'width': '50%', 'align': 'center'})[2]
 
     # location is not listed for all games
@@ -259,7 +338,13 @@ def find_location(soup):
 
 
 def find_attendance(soup):
-    """Given a box score page, find the attendance of the game."""
+    """Given a box score page, find the attendance of the game.
+
+    Args:
+        soup: A bs4.BeautifulSoup object of a stats.ncaa.org box score webpage.
+
+    Returns:
+        The attendance of the game."""
     el_metadata = soup.find_all('table', attrs={'width': '50%', 'align': 'center'})[2]
 
     # location appears above attendance in games where it is listed, but it is not listed for all
@@ -272,7 +357,14 @@ def find_attendance(soup):
 
 
 def find_referees(soup):
-    """Given a box score page, find the referees if they are listed."""
+    """Given a box score page, find the referees if they are listed.
+
+    Args:
+        soup: A bs4.BeautifulSoup object of a stats.ncaa.org box score webpage.
+
+    Returns:
+        A list of the names of the referees of the game. If none were listed,
+        returns a list of three None values."""
     el_referees = soup.find_all('table', attrs={'width': '50%', 'align': 'center'})[3].find_all('td')[1]
     referees_text = el_referees.get_text().strip()
     if referees_text.count("\n") == 4:
@@ -287,9 +379,18 @@ def find_referees(soup):
 
 
 def find_team_ids(soup):
-    """Given a soup of the box score of a game, find the team season IDs or school IDs of each
-    team. Only one will be listed for each team and I can't predict when it's whach way. Returns a
-    tuple in the format (h_team_season_id, h_school_id, a_team_season_id, a_school_id)."""
+    """Given a soup of the box score of a game, find the team season IDs or
+    school IDs of each team.
+
+    Args:
+        soup: A bs4.BeautifulSoup object of a stats.ncaa.org box score webpage.
+
+    Returns:
+        A tuple of the team season IDs or school IDs of each team. Only one
+        of them will be found for a team (or none if the team is not NCAA), and
+        the other will be set to None. Values will be returned in the order
+        (home team season ID, home school ID, away team season ID,
+        away school ID)."""
     el_table = soup.find('table', class_='mytable')
     el_h_link = el_table.find_all('tr')[2].find('a')
     el_a_link = el_table.find_all('tr')[1].find('a')
@@ -313,8 +414,16 @@ def find_team_ids(soup):
 
 
 def find_names_and_exhibition(soup):
-    """Given a soup of the box score of a game, find the names of each team and whether the game
-    was an exhibition. Returns a tuple in the format (h_name, a_name, is_exhibition)."""
+    """Given a soup of the box score of a game, find the names of each team and
+    whether the game was an exhibition.
+
+    Args:
+        soup: A bs4.BeautifulSoup object of a stats.ncaa.org box score webpage.
+
+    Returns:
+        A tuple containing the names of each team and whether the game was an
+        exhibition, in the order (home team name, away team name,
+        is exhibition)."""
     is_exhibition = False
     el_headings = soup.find_all('tr', class_='heading')
     h_name = el_headings[1].get_text()
@@ -334,14 +443,22 @@ def find_names_and_exhibition(soup):
 
 
 def find_raw_boxes(soup):
-    """Given a box score page, find the box scores. Returns them in a list in the format:
-    [NCAA player id (as int),
-    True if away or False if home,
-    name in the format 'Last, First' (suffixes are inconsistent),
-    position (e.g. 'G') -- sometimes not listed,
-    games played (nearly always '1' -- can safely be discarded),
-    duration played (e.g. '6:04'),
-    'FGM', 'FGA', '3PM', '3PA', 'FTM', 'FTA', 'PTS', 'ORB', 'DRB', 'TRB', 'AST', 'TOV', 'STL', 'BLK', 'PF', 'DQ']"""
+    """Given a box score page, find the box scores.
+
+    Args:
+        soup: A bs4.BeautifulSoup object of a stats.ncaa.org box score webpage.
+
+    Returns:
+        The box score information of the game as a list of lists. Each sub-list
+        represents one player's stats, in the format:
+        [NCAA player id (as int),
+        True if away or False if home,
+        name as written, usually in the format 'Last, First',
+        position (e.g. 'G') -- sometimes not listed,
+        games played (nearly always '1' -- can safely be discarded),
+        duration played in 'M:ss' format (e.g. '6:04'),
+        'FGM', 'FGA', '3PM', '3PA', 'FTM', 'FTA', 'PTS', 'ORB', 'DRB', 'TRB',
+        'AST', 'TOV', 'STL', 'BLK', 'PF', 'DQ'] (each stat as a string)"""
     is_away = True
     boxes = []
 
@@ -366,19 +483,27 @@ def find_raw_boxes(soup):
     return boxes
 
 
-def find_raw_plays(soup, pbp_id):
-    """Given a play-by-play page, find the plays. Returns them in a list in the format:
-    [PBP ID,
-    period (first half = 0, second half = 1, 1st overtime = 2, 2nd overtime = 3, etc),
-    time remaining in the format MM:SS:cc, MM:SS, or M:SS,
-    away team play,
-    score formatted like "46-41" with away team first,
-    home team play]"""
+def find_raw_plays(soup):
+    """Given a play-by-play page, find the plays in the game.
+
+    Args:
+        soup: A bs4.BeautifulSoup object of a stats.ncaa.org play-by-play
+            webpage.
+
+    Returns:
+        The plays of the game as a list of lists, each sub-list representing
+        one play in the format:
+        [period (first half = 0, second half = 1, 1st overtime = 2,
+            2nd overtime = 3, etc),
+        time remaining in the format MM:SS:cc, MM:SS, or M:SS,
+        away team play,
+        score formatted like "46-41" with away team first,
+        home team play]"""
     plays = []
     period = 0
     for el_table in soup.find_all('table', class_='mytable')[1:]:
         for el_tr in el_table.find_all('tr'):
-            play_row = [pbp_id, period]
+            play_row = [period]
             for el_td in el_tr.find_all('td'):
                 play_row.append(el_td.get_text().strip())
             while len(play_row) < 5:
@@ -442,9 +567,18 @@ def clean_single_box(raw_box, roster):
 
 
 def clean_name(name):
-    """Rearrange the given name from 'Last, First' to 'First Last'. Also accepts names without the
-    space after the comma. If there is no comma, returns the name as is. Names with extra commas
-    like 'Last, Jr., First' rearrange to 'First Last, Jr.'"""
+    """Converts a raw player name into a clean 'First Last' format.
+
+    Rearranges the name string such that the first name comes first, followed
+    by the last name, and then any suffixes. Also removes any double spaces,
+    makes all caps names into title case, and removes nicknames in quotes.
+
+    Args:
+        name: A name as written in a stats.ncaa.org box score or play-by-play
+         log, usually in the format 'Last, First' (but not consistent).
+
+    Returns:
+        A clean name in the format 'First Last'."""
     name = re.sub('[^\x00-\x7f]', '', name)     # remove any non-ASCII characters
     while "  " in name:                         # remove double spaces
         name = name.replace("  ", " ")
@@ -472,37 +606,39 @@ def identify_player(player_id, name, roster):
     """Given the name and player ID of a player, and the roster of the team they play on, identify
     the player. Look for an exact match, otherwise choose the player with the most similar name. If
     no matching or even similar player can be found, return a player with the given name and a
-    player ID of None."""
-    # if the player plays on a non-D1 team (thus having no associated roster), do not try to
-    # identify them
-    if roster is None:
-        return {
-            'player ID': None,
-            'name': name
-        }
-    else:
-        highest_similarity = 3  # discard any matches with a lower similarity than 3
-        most_similar = {
-            'player ID': None,
-            'name': name
-        }
+    player ID of None.
 
-        # if there is an exactly matching name or player ID, return that player, or otherwise
-        # choose the player with the most similar name
-        for player in roster:
-            if (player_id == player['player_id']) or (name == player['name']):
+    Args:
+        player_id: The NCAA player ID of the player to be matched.
+        name: The name of the player to be matched.
+        roster: A list of dicts containing the player ID and name of each
+            player on the team of the player to be identified.
+
+    Returns:
+        If player with an exactly matching player ID or name could be found,
+        returns that player's dict with keys 'player ID' and 'name'. If there
+        is no exact match, returns the most similar player. If no likely
+        matches are found, returns a dict with the player's name unchanged and
+        a player ID of None."""
+    highest_similarity = 3  # discard any matches with a similarity less than 3
+    most_similar = {
+        'player ID': None,
+        'name': name
+    }
+
+    # if there is an exactly matching name or player ID, return that player, or otherwise
+    # choose the player with the most similar name
+    for player in roster:
+        if (player_id == player['player_id']) or (name == player['name']):
+            most_similar = player
+            break
+        else:
+            similarity = score_name_similarity(name, player[1])
+            if similarity > highest_similarity:
+                highest_similarity = similarity
                 most_similar = player
-                break
-            else:
-                similarity = score_name_similarity(name, player[1])
-                if similarity > highest_similarity:
-                    highest_similarity = similarity
-                    most_similar = player
 
-        return {
-            'player ID': most_similar[0],
-            'name': most_similar[1]
-        }
+    return most_similar
 
 
 def clean_position(raw_position):
@@ -667,9 +803,9 @@ def parse_all_plays(raw_plays):
 
 def parse_play_row(play_row):
     """Put all the information in the row into a dict that contains parsed play information."""
-    play_1 = play_row[3]
-    play_2 = play_row[5]
-    score = play_row[4]
+    play_1 = play_row[2]
+    play_2 = play_row[4]
+    score = play_row[3]
 
     # if there was an actual play:
     if (score != "Score") and ((len(play_1) > 0) or (len(play_2) > 0)):
@@ -687,11 +823,11 @@ def parse_play_row(play_row):
         scores = clean_score(score)
         parsed_play['home score'] = scores[1]
         parsed_play['away score'] = scores[0]
-        parsed_play['time'] = clean_centi_time(play_row[2])
+        parsed_play['time'] = clean_centi_time(play_row[1])
 
         # get other information from the row
         parsed_play['game ID'] = play_row[0]
-        parsed_play['period'] = int(play_row[1])
+        parsed_play['period'] = int(play_row[0])
         parsed_play['is away'] = is_away
 
         return parsed_play
@@ -762,12 +898,24 @@ def clean_centi_time(raw_time):
 
 
 def clean_score(score):
-    """Given the entry of a score in a play-by-play in a format like '41-39', return the scores in
-    a format like (41, 39)."""
+    """Given the entry of a score cell in a play-by-play, return each team's
+    score.
+
+    Args:
+        score: The raw text of the score cell, in a format like '41-39', with
+            the away team's score listed first.
+
+    Returns:
+        Each team's score as an int in a dict with keys 'home' and 'away'.
+        If the score can't be identified, returns a dict with the same keys and
+        None for both values."""
     if (type(score) == str) and ("-" in score):
-        return int(score[:score.index("-")]), int(score[score.index("-") + 1:])
+        return {
+            'home': int(score[score.index("-") + 1:]),
+            'away': int(score[:score.index("-")])
+        }
     else:
-        return [None] * 2
+        return {'home': None, 'away': None}
 
 
 # Below are functions dedicated to parsing plays in the 'caps' notation format.
