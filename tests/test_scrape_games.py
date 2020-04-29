@@ -183,7 +183,19 @@ def test_clean_centi_time():
 def test_score_name_similarity():
     assert sg.score_name_similarity("F L", "First Last") == 8
     assert sg.score_name_similarity("First Last", "F L") == 8
+    assert sg.score_name_similarity("First Last", "F D") == -7
     assert sg.score_name_similarity("First Last", "Firs Last") == 9
+    assert sg.score_name_similarity("First Last", "First Last") == 16
+    assert sg.score_name_similarity("First Last, Jr", "First Last, Jr.") == 24
+    assert sg.score_name_similarity("First Last, Jr", "First... Last, Jr.") == 24
+    assert sg.score_name_similarity("Firs Last", "First Last") == 9
+    assert sg.score_name_similarity("first last", "First Last") == 16
+    assert sg.score_name_similarity("first LAST", "First Last") == 16
+    assert sg.score_name_similarity("First LAST", "FIrst LaSt") == 16
+    assert sg.score_name_similarity("Last First", "First Last") == 12
+    assert sg.score_name_similarity("Last Firs", "Firs Last") == 8
+    assert sg.score_name_similarity("Longerfirst Last", "Longerirst Last") == 21
+    assert sg.score_name_similarity("Longerfirst Last", "Longerfirst Last") == 28
 
 
 # Below are functions that test functions for parsing plays from play-by-play logs.
