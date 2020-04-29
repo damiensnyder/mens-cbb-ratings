@@ -37,16 +37,19 @@ UPLOAD_BOX_QUERY = "INSERT INTO boxes (game_id, box_in_game, player_id, player_n
                    "%s, %s, %s, %s, %s);"
 NULLABLE_PLAY_FIELDS = ["period", "time", "shot clock", "home score", "away score", "is away",
                         "action", "flag 1", "flag 2", "flag 3", "flag 4", "flag 5", "flag 6"]
-UPLOAD_PLAY_QUERY = "INSERT INTO plays (game_id, play_in_game, period, time_remaining," \
-                    "shot_clock, h_score, a_score, agent_is_away, action, flag1, flag2, flag3," \
-                    "flag4, flag5, flag6, agent_id, agent_name, h_p1_id, h_p1_name, h_p2_id," \
-                    "h_p2_name, h_p3_id, h_p3_name, h_p4_id, h_p4_name, h_p5_id, h_p5_name," \
-                    "a_p1_id, a_p1_name, a_p2_id, a_p2_name, a_p3_id, a_p3_name, a_p4_id," \
-                    "a_p4_name, a_p5_id, a_p5_name) VALUES (%s, %s, %s, %s, %s, %s, %s, %s," \
-                    "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s," \
-                    "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s"
-FETCH_TEAM_SEASON_ID_QUERY = "SELECT (team_season_id) FROM team_seasons WHERE school_id = %s AND" \
-                             "season_year = %s"
+UPLOAD_PLAY_QUERY = ("INSERT INTO plays (game_id, play_in_game, period,"
+                     "time_remaining, shot_clock, h_score, a_score,"
+                     "agent_is_away, action, flag1, flag2, flag3, flag4,"
+                     "flag5, flag6, agent_id, agent_name, h_p1_id, h_p1_name,"
+                     "h_p2_id, h_p2_name, h_p3_id, h_p3_name, h_p4_id,"
+                     "h_p4_name, h_p5_id, h_p5_name, a_p1_id, a_p1_name,"
+                     "a_p2_id, a_p2_name, a_p3_id, a_p3_name, a_p4_id,"
+                     "a_p4_name, a_p5_id, a_p5_name) VALUES (%s, %s, %s, %s,"
+                     "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,"
+                     "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,"
+                     "%s, %s, %s, %s, %s, %s")
+FETCH_TEAM_SEASON_ID_QUERY = ("SELECT (team_season_id) FROM team_seasons WHERE"
+                              "school_id = %s AND season_year = %s")
 FETCH_DIVISION_CODE_QUERY = "SELECT division_code FROM seasons WHERE year = %s"
 FETCH_ROSTER_QUERY = "SELECT (player_id, player_name) FROM player_seasons WHERE team_season_id =" \
                      "%s"
@@ -737,23 +740,47 @@ def fetch_roster(cursor, team_season_id, school_id, year):
     return [{'player ID': player[0], 'name': player[1]} for player in raw_roster]
 
 
-def upload_game(cursor, game_id, h_team_season_id, a_team_season_id, h_name, a_name, start_time,
-                location, attendance, referees, is_exhibition):
-    """Assert that fields that are required not to be null in the database are not null, and
-    upload to database."""
-    assert (game_id is not None) and (h_name is not None) and (a_name is not None) \
-        and len(referees) == 3
-    game_tuple = (game_id, h_team_season_id, a_team_season_id, h_name, a_name, start_time,
-                  location, attendance, referees[0], referees[1], referees[2], is_exhibition)
+def upload_game(cursor, game_id, h_team_season_id, a_team_season_id, h_name,
+                a_name, start_time, location, attendance, referees,
+                is_exhibition):
+    """Uploads the given game metadata to the database.
+
+    Args:
+        cursor: The pymysql cursor object of the database connection.
+        game_id: The PBP ID of the game.
+        h_team_season_id: The home team's team season ID.
+        a_team_season_id: The away team's team season ID.
+        h_name: The home team's name.
+        a_name: The away team's name.
+        start_time: The start time of the game, as a string in ISO-8601 format.
+        location: The location of the game.
+        attendance: The attendance of the game.
+        referees: A list of the referees of the game.
+        is_exhibition: Whether the game was an exhibition."""
+    if game_id is None:
+        raise ValueError('Game ID not found.')
+    if h_name is None:
+        raise ValueError('Home team name not found.')
+    if a_name is None:
+        raise ValueError('Away team name not found.')
+    if len(referees) != 3:
+        raise ValueError(f'Expected 3 referees. Received {len(referees)} instead.')
+    game_tuple = (game_id, h_team_season_id, a_team_season_id, h_name, a_name,
+                  start_time, location, attendance, referees[0], referees[1],
+                  referees[2], is_exhibition)
     cursor.execute(UPLOAD_GAME_QUERY, game_tuple)
 
 
 def upload_boxes(cursor, boxes):
-    """Assert that fields in each box that are required not to be null in the database are not
-    null and upload all boxes in the game to the database."""
+    """Uploads the given box scores to the database.
+
+    Args:
+        cursor: The pymysql cursor object of the database connection.
+        boxes: The boxes in the game as a list of dicts."""
     i = 0   # tracks which box it is in the game
     for box in boxes:
-        assert 'PBP id' in box
+        if 'PBP id' not in box:
+            raise KeyError('Game ID not found.')
         box_tuple = (box['PBP id'], i)
         for field in NULLABLE_BOX_FIELDS:
             if field not in box:
@@ -765,8 +792,12 @@ def upload_boxes(cursor, boxes):
 
 
 def upload_plays(cursor, game_id, plays):
-    """Assert that fields in each play that are required not to be null in the database are not
-    null and upload all plays in the game to the database."""
+    """Uploads the given plays to the database.
+
+    Args:
+        cursor: The pymysql cursor object of the database connection.
+        game_id: The PBP ID of the game.
+        plays: The plays in the game as a list of dicts."""
     i = 0   # tracks which play it is in the game
     for play in plays:
         play_tuple = (game_id, i)
@@ -789,7 +820,14 @@ def upload_plays(cursor, game_id, plays):
 
 
 def parse_all_plays(raw_plays):
-    """Parse all plays in the game, not adding any that are not real plays or cause errors."""
+    """Parses all plays in the game that can be parsed.
+
+    Args:
+        raw_plays: A list of the raw play rows of the paly-by-play log.
+
+    Returns:
+        All the plays that could be parsed, as a list of dicts of parsed
+        plays."""
     plays = []
     for play_row in raw_plays:
         try:
@@ -1120,7 +1158,22 @@ def parse_semicolon_play(play, player):
 
 
 def parse_semicolon_possession_arrow(play):
-    """Parses a play in semicolon format involving a possession arrow event."""
+    """Parses a play in semicolon format involving a possession arrow event.
+
+    Args:
+        play: The text of a play in semicolon format, as written.
+
+    Returns:
+        A dict with the following keys and values:
+        'player': 'Team'
+        'action': 'possession arrow'
+        'type': The incident that caused the possession arrow event. Possible
+            values are "held ball", "block tie-up", "lodged ball", and "out of
+            bounds".
+
+    Raises:
+        ValueError: If the type of possession arrow event could not be
+            identified."""
     if " heldball" in play:
         jumpball_type = "held ball"
     elif " blocktieup" in play:
@@ -1130,7 +1183,7 @@ def parse_semicolon_possession_arrow(play):
     elif " outofbounds" in play:
         jumpball_type = "out of bounds"
     else:
-        raise ValueError(f"Unknown jump ball type: '{play}'")
+        raise ValueError(f"Unknown possession arrow event type: '{play}'")
 
     return {
         'player': "Team",
@@ -1140,7 +1193,20 @@ def parse_semicolon_possession_arrow(play):
 
 
 def parse_semicolon_timeout(play):
-    """Parses a play in semicolon format involving a timeout."""
+    """Parses a play in semicolon format involving a possession arrow event.
+
+    Args:
+        play: The text of a play in semicolon format, as written.
+
+    Returns:
+        A dict with the following keys and values:
+        'player': 'Team' if a team called the timeout, otherwise 'Floor'.
+        'action': 'timeout'
+        'type': The type of timeout. Possible values are "short", "full",
+            and "media".
+
+    Raises:
+        ValueError: If the type of timeout could not be identified."""
     if " commercial" in play:
         caller = "Floor"
         timeout_type = "media"
@@ -1332,7 +1398,8 @@ def parse_semicolon_free_throw(play, player):
     }
 
 
-# Below are functions dedicated to cleaning and preprocessing information from a game.
+# Below are functions dedicated to cleaning and preprocessing parsed
+# play-by-play logs from a game and fixing irregularities.
 
 
 def track_shot_clock(plays, max_shot_clock=30, orb_to_20=True):
