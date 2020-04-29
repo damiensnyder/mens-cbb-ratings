@@ -1,8 +1,10 @@
-from src.scrape_util import Scraper
-from time import sleep
+import time
 import datetime
 import re
+
 import pymysql
+
+import src.scrape_util
 
 CRAWL_DELAY = 1
 VERBOSE = 3
@@ -56,7 +58,7 @@ FETCH_ROSTER_QUERY = "SELECT (player_id, player_name) FROM player_seasons WHERE 
 def scrape_range(start_year, start_month, start_day, end_year, end_month, end_day):
     """Scrape each game from the start date (inclusive) to the end date (exclusive) and upload
     the results to the database."""
-    scraper = Scraper(thread_count=DEFAULT_THREAD_COUNT, verbose=VERBOSE)
+    scraper = src.scrape_util.Scraper(thread_count=DEFAULT_THREAD_COUNT, verbose=VERBOSE)
     conn = connect_to_db()
     cursor = conn.cursor()
 
@@ -91,7 +93,7 @@ def scrape_day(scraper, cursor, month, day, year, season, season_code):
     box_ids = scrape_box_ids(scraper, month, day, year, season_code)
     for box_id in box_ids:
         scrape_game(scraper, cursor, season, box_id)
-    sleep(CRAWL_DELAY)
+    time.sleep(CRAWL_DELAY)
 
 
 def scrape_box_ids(scraper, month, day, year, season_code):
@@ -116,7 +118,7 @@ def scrape_box_ids(scraper, month, day, year, season_code):
             if retries_left <= 0:
                 scraper.log(f"Done retrying. (Date: {month}/{day}/{year})", 0)
                 return None
-        sleep(CRAWL_DELAY)
+        time.sleep(CRAWL_DELAY)
 
 
 def scrape_game(scraper, cursor, season, box_id, by_pbp=False):
@@ -174,7 +176,7 @@ def scrape_box_score(scraper, box_id, by_pbp=False):
                 scraper.log(f"Done retrying. (Box ID: {box_id})", 1)
                 return None
         retries_left -= 1
-        sleep(CRAWL_DELAY)
+        time.sleep(CRAWL_DELAY)
 
 
 def scrape_plays(scraper, pbp_id):
@@ -199,7 +201,7 @@ def scrape_plays(scraper, pbp_id):
             if retries_left <= 0:
                 scraper.log(f"Done retrying. (PBP ID: {pbp_id})", 1)
                 return None
-        sleep(CRAWL_DELAY)
+        time.sleep(CRAWL_DELAY)
 
 
 # Below are functions dedicated to extracting information from BeautifulSoup representations of box

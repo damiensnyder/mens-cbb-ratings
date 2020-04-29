@@ -1,6 +1,3 @@
-### IMPORTS ###
-
-
 import pytest
 import src.scrape_util
 import time

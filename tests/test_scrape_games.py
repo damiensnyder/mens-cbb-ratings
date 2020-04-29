@@ -1,129 +1,53 @@
-import src.scrape_games as sg
-from bs4 import BeautifulSoup as bs
+import bs4
+import json
 import pymysql
 
-correct_box_values = {
-    1602674: {
-        'pbp ID': 4654374,
-        'game time': "2018/11/06 19:00",
-        'location': "Doug Collins Court at Redbird Arena",
-        'attendance': 4764,
-        'referees': ["Mike O'Neill", "Roland Simmons", "Greg Rennegarbe"],
-        'team IDs': (450575, 450811, None, None),
-        'team names': ("Illinois St.", "FGCU", False),
-        'raw box 1': [1853705, True, 'Carlyle, Christian', '*', '1', '33:00', '1', '3', '', '1',
-                      '3', '4', '5', '2', '7', '9', '2', '4', '', '', '3', '']
-    },
-    1610092: {
-        'pbp ID': 4738602,
-        'game time': "2019/01/05",
-        'location': "Elmore Gymnasium",
-        'attendance': 898,
-        'referees': [None] * 3,
-        'team IDs': (None, None, 6, 314),
-        'team names': ("Alabama A&M", "Jackson St.", False),
-        'raw box 1': [2099975, True, 'Howell, Chris', '', '1', '38:00', '8', '20', '', '3', '1',
-                      '2', '17', '4', '10', '14', '', '2', '2', '', '2']
-    },
-    1614866: {
-        'pbp ID': 4696618,
-        'game time': "2019/02/04 19:00",
-        'location': None,
-        'attendance': 5251,
-        'referees': [None] * 3,
-        'team IDs': (None, None, 639, 220),
-        'team names': ("Siena", "Fairfield", False),
-        'raw box 1': [1968272, True, 'Cruz, Jesus', 'G', '1', '30:43', '2', '9', '', '3', '1',
-                      '1', '5', '3', '2', '5', '3', '2', '', '', '3']
-    },
-    1605562: {
-        'pbp ID': 4666158,
-        'game time': "2018/11/24 16:00",
-        'location': "Princess Anne, Md. (Hytche Center)",
-        'attendance': 361,
-        'referees': ["Que'z Crawford", "Zakee Cook", "La'Kenneth Kindred"],
-        'team IDs': (None, None, 393, None),
-        'team names': ("UMES", "Central Penn", False),
-        'raw box 1': [None, True, 'BAYLOR, Noah', '*', '1', '26:00', '4', '4', '', '', '3', '4',
-                      '11', '2', '5', '7', '1', '2', '', '', '3']
-    }
-}
-correct_scoreboard_values = {
-    20190101: {
-        'box IDs': [1609673, 1609674, 1609671, 1609672, 1609682, 1609680]
-    }
-}
-correct_parsed_plays = {
-    "Jordan Kitchen, jumpball lost": {
-        'player': "Jordan Kitchen",
-        'action': "jump ball",
-        'success': False},
-    "Jashire Hardnett, 2pt jumpshot   missed": {
-        'player': "Jashire Hardnett",
-        'action': "shot",
-        'success': False,
-        'length': "long 2",
-        'type': "jump shot",
-        'second chance': False,
-        'fast break': False,
-        'blocked': False
-    },
-    "Jashire Hardnett, rebound offensive": {
-        'player': "Jashire Hardnett",
-        'action': "rebound",
-        'offensive': True,
-        'type': "live"
-    },
-    "Jashire Hardnett, 2pt jumpshot 2ndchance  missed": {
-        'player': "Jashire Hardnett",
-        'action': "shot",
-        'success': False,
-        'length': "long 2",
-        'type': "jump shot",
-        'second chance': True,
-        'fast break': False,
-        'blocked': False
-    },
-    "BJ Standley, rebound defensive": {
-        'player': "BJ Standley",
-        'action': "rebound",
-        'offensive': False,
-        'type': "live"
-    },
-    "BJ Standley, turnover offensive": {
-        'player': "BJ Standley",
-        'action': "turnover",
-        'type': "offensive foul",
-    },
-    "TJ Haws, 3pt jumpshot fromturnover  missed": {
-        'player': "TJ Haws",
-        'action': "shot",
-        'success': False,
-        'length': "3",
-        'type': "jump shot",
-        'second chance': False,
-        'fast break': False,
-        'blocked': False
-    },
-    "Luke Worthington, 2pt layup 2ndchance;fromturnover;pointsinthepaint  made": {
-        'player': "Luke Worthington",
-        'action': "shot",
-        'success': False,
-        'length': "short 2",
-        'type': "layup",
-        'second chance': True,
-        'fast break': False,
-        'blocked': False
-    }
-}
+import src.scrape_games as sg
+
+PATH_BOX_HTML_VALUES = "../tests/test_cases/box_html_values.json"
+PATH_SCOREBOARD_HTML_VALUES = "../tests/test_cases/scoreboard_html_values.json"
+PATH_PARSED_PLAY_VALUES = "../tests/test_cases/parsed_play_values.json"
 
 
-# Below are functions that test the functions intended to gather raw information from BeautifulSoup
-# objects representing stats.ncaa.org webpages.
+# Test cases for functions that clean stats.ncaa.org scoreboard pages.
+
+
+def test_clean_scoraboard():
+    """Opens the JSON file with the dates and desired outputs for the test
+    cases and runs all tests for each date."""
+    with open(PATH_SCOREBOARD_HTML_VALUES, 'r') as correct_scoreboard_file:
+        dates = json.load(correct_scoreboard_file)
+        for date in dates:
+            with open(f'webpages/scoreboard_{date}.html', 'r')\
+                    as scoreboard_html_file:
+                soup = bs4.BeautifulSoup(scoreboard_html_file, 'html.parser')
+                test_find_box_ids(soup, dates[date]['box IDs'])
 
 
 def test_find_box_ids(soup, correct_box_ids):
     assert sg.find_box_ids(soup) == correct_box_ids
+
+
+# Test cases for functions that clean stats.ncaa.org box score pages.
+
+
+def test_clean_box_score():
+    """Opens the JSON file with the box IDs and desired outputs for the test
+    cases and runs all tests for each box ID."""
+    with open(PATH_BOX_HTML_VALUES, 'r') as correct_box_file:
+        box_ids = json.load(correct_box_file)
+        for box_id in box_ids:
+            with open(f'webpages/box_{box_id}.html', 'r') as box_html_file:
+                soup = bs4.BeautifulSoup(box_html_file, 'html.parser')
+                test_find_pbp_id(soup, box_ids[box_id]['pbp ID'])
+                test_find_game_time(soup, box_ids[box_id]['game time'])
+                test_find_location(soup, box_ids[box_id]['location'])
+                test_find_attendance(soup, box_ids[box_id]['attendance'])
+                test_find_referees(soup, box_ids[box_id]['referees'])
+                test_find_team_ids(soup, box_ids[box_id]['team IDs'])
+                test_find_names_and_exhibition(soup,
+                                               box_ids[box_id]['team names'])
+                test_find_raw_boxes(soup, box_ids[box_id]['raw box 1'])
 
 
 def test_find_pbp_id(soup, correct_pbp_id):
@@ -147,11 +71,11 @@ def test_find_referees(soup, correct_referees):
 
 
 def test_find_team_ids(soup, correct_team_ids):
-    assert sg.find_team_ids(soup) == correct_team_ids
+    assert list(sg.find_team_ids(soup)) == correct_team_ids
 
 
 def test_find_names_and_exhibition(soup, correct_team_names):
-    assert sg.find_names_and_exhibition(soup) == correct_team_names
+    assert list(sg.find_names_and_exhibition(soup)) == correct_team_names
 
 
 def test_find_raw_boxes(soup, correct_raw_box_1):
@@ -160,7 +84,14 @@ def test_find_raw_boxes(soup, correct_raw_box_1):
     return given_raw_box_1
 
 
-# Below are functions that test functions that connect to the database.
+# Test cases for functions that interact with the database.
+
+
+def test_db_interaction():
+    """Runs all tests of database interaction."""
+    conn = test_connect_to_db()
+    cursor = conn.cursor()
+    test_fetch_division_code(cursor)
 
 
 def test_connect_to_db():
@@ -173,8 +104,17 @@ def test_fetch_division_code(cursor):
     assert sg.fetch_division_code(cursor, 2019) == 16700
 
 
-# Below are functions that test the functions used to clean the raw data extracted from NCAA
-# webpages.
+# Test cases for functions that to clean the raw data extracted from
+# stats.ncaa.org box score pages.
+
+
+def test_clean_raw_box_data():
+    """Runs all tests of functions that clean raw box score data."""
+    test_clean_name()
+    test_clean_position()
+    test_clean_time()
+    test_clean_stat()
+    test_score_name_similarity()
 
 
 def test_clean_name():
@@ -232,17 +172,6 @@ def test_clean_stat():
     assert sg.clean_stat("23") == 23
 
 
-def test_clean_centi_time():
-    """Tests relevant cases of clean_centi_time."""
-    assert sg.clean_centi_time('11:12') == 672
-    assert sg.clean_centi_time('01:12') == 72
-    assert sg.clean_centi_time('01:02') == 62
-    assert sg.clean_centi_time('01:12:63') == 72.63
-    assert sg.clean_centi_time('00:12:63') == 12.63
-    assert sg.clean_centi_time('00:02:63') == 2.63
-    assert sg.clean_centi_time('00:02:03') == 2.03
-
-
 def test_score_name_similarity():
     assert sg.score_name_similarity("F L", "First Last") == 8
     assert sg.score_name_similarity("First Last", "F L") == 8
@@ -261,55 +190,50 @@ def test_score_name_similarity():
     assert sg.score_name_similarity("Longerfirst Last", "Longerfirst Last") == 28
 
 
-# Below are functions that test the functions that parse plays
+# Test cases for functions that parse plays from stats.ncaa.org play-by-play
+# pages.
+
+
+def test_clean_raw_play_data():
+    """Runs all tests of functions for parsing play-by-play data."""
+    test_clean_centi_time()
+    test_parse_play()
+
+
+def test_clean_centi_time():
+    """Tests relevant cases of clean_centi_time."""
+    assert sg.clean_centi_time('11:12') == 672
+    assert sg.clean_centi_time('01:12') == 72
+    assert sg.clean_centi_time('01:02') == 62
+    assert sg.clean_centi_time('01:12:63') == 72.63
+    assert sg.clean_centi_time('00:12:63') == 12.63
+    assert sg.clean_centi_time('00:02:63') == 2.63
+    assert sg.clean_centi_time('00:02:03') == 2.03
 
 
 def test_parse_play():
-    for play in correct_parsed_plays:
-        try:
-            assert sg.parse_play(play) == correct_parsed_plays[play]
-        except AssertionError:
-            print("Assertion error in parsing play. Play:")
-            print(play)
-            print(sg.parse_play(play))
-            exit(1)
+    """Test that the outputs of the parse_play function match the outputs
+    specified in parsed_play_values.json."""
+    with open(PATH_PARSED_PLAY_VALUES, 'r') as correct_values_file:
+        plays = json.load(correct_values_file)
+        for play in plays:
+            try:
+                assert sg.parse_play(play) == plays[play]
+            except AssertionError:
+                print(f"Assertion error in parsing play. Play: '{play}'")
+                print("Correct value: " + str(plays[play]))
+                print("Received value: " + str(sg.parse_play(play)))
 
 
-# Below are functions that test functions for parsing plays from play-by-play logs.
-
-
-# Main method.
+# Main method. Runs all functions that run tests.
 
 
 def main():
-    conn = test_connect_to_db()
-    cursor = conn.cursor()
-    test_fetch_division_code(cursor)
-
-    test_clean_name()
-    test_clean_position()
-    test_clean_time()
-    test_clean_stat()
-    test_clean_centi_time()
-    test_score_name_similarity()
-
-    test_parse_play()
-
-    for date in correct_scoreboard_values:
-        with open(f'webpages/scoreboard_{date}.html', 'r') as file:
-            soup = bs(file, 'html.parser')
-            test_find_box_ids(soup, correct_scoreboard_values[date]['box IDs'])
-    for box_id in correct_box_values:
-        with open(f'webpages/box_{box_id}.html', 'r') as file:
-            soup = bs(file, 'html.parser')
-            test_find_pbp_id(soup, correct_box_values[box_id]['pbp ID'])
-            test_find_game_time(soup, correct_box_values[box_id]['game time'])
-            test_find_location(soup, correct_box_values[box_id]['location'])
-            test_find_attendance(soup, correct_box_values[box_id]['attendance'])
-            test_find_referees(soup, correct_box_values[box_id]['referees'])
-            test_find_team_ids(soup, correct_box_values[box_id]['team IDs'])
-            test_find_names_and_exhibition(soup, correct_box_values[box_id]['team names'])
-            test_find_raw_boxes(soup, correct_box_values[box_id]['raw box 1'])
+    test_clean_scoraboard()
+    test_clean_box_score()
+    test_db_interaction()
+    test_clean_raw_box_data()
+    test_clean_raw_play_data()
 
 
 if __name__ == '__main__':

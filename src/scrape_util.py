@@ -1,16 +1,10 @@
-### IMPORTS ###
-
-
-import requests
-from random import choices
-from bs4 import BeautifulSoup as bs
-import signal
-from time import sleep
+import time
+import random
 import datetime
+import signal
 
-
-### CONSTANTS
-
+import bs4
+import requests
 
 PROXY_SOURCES = [
     "https://www.free-proxy-list.net",
@@ -23,9 +17,6 @@ UA_SOURCES = [
 MAX_RETRIES = 15
 RETRY_DELAY = 1
 TIMEOUT_LENGTH = 10
-
-
-### CLASSES ###
 
 
 class Snake:
@@ -64,7 +55,7 @@ class Retriever:
         if thread_count == 'all':
             self.thread_ips = self.clean_and_sort(self.connect_and_parse())
         else:
-            self.thread_ips = choices(self.clean_and_sort(self.connect_and_parse()), k=thread_count)
+            self.thread_ips = random.choices(self.clean_and_sort(self.connect_and_parse()), k=thread_count)
 
     def __repr__(self):
         return f'<ProxyRetriever object containing {len(self.thread_ips)} addresses>'
@@ -72,7 +63,7 @@ class Retriever:
     def connect_and_parse(self):
         website = self.sources[0]
         r = self.s.get(website)
-        soup = bs(r.text, 'html.parser')
+        soup = bs4.BeautifulSoup(r.text, 'html.parser')
         proxy_table = soup.find('tbody')
         proxy_list = proxy_table.find_all('tr')
         elites = [tr for tr in proxy_list if 'elite' in tr.text]
@@ -97,7 +88,7 @@ class Source:
 
     def get_markup(self, source):
         r = self.s.get(source)
-        soup = bs(r.text, 'html.parser')
+        soup = bs4.BeautifulSoup(r.text, 'html.parser')
         return soup
 
 
@@ -120,7 +111,7 @@ class HideMyIp(Source):
 
     def get_markup(self, **kwargs):
         r = self.s.get(self.url)
-        soup = bs(r.text, 'html.parser')
+        soup = bs4.BeautifulSoup(r.text, 'html.parser')
         return soup
 
     def connect_and_parse(self):
@@ -141,7 +132,7 @@ class UserAgent:
         if thread_count == 'all':
             self.thread_uas = self.get_ua_list()
         else:
-            self.thread_uas = choices(self.get_ua_list(), k=thread_count)
+            self.thread_uas = random.choices(self.get_ua_list(), k=thread_count)
 
     def __repr__(self):
         return self.thread_uas
@@ -149,7 +140,7 @@ class UserAgent:
     def get_ua_list(self, source=ua_source_url):
         """Fetches a list of user-agents."""
         r = requests.get(source)
-        soup = bs(r.content, 'html.parser')
+        soup = bs4.BeautifulSoup(r.content, 'html.parser')
         tables = soup.find_all('table')
         return [table.find('td').text for table in tables]
 
@@ -217,12 +208,12 @@ class Scraper:
                     else:
                         self.log(f"Page load failed. (URL: {url})")
                         retries_left -= 1
-                        sleep(RETRY_DELAY)
+                        time.sleep(RETRY_DELAY)
                 else:
                     # if success, add the mask back into the list, cancel any timeouts, and return the soup
                     self.masks.append(mask)
                     timeout.cancel()
-                    soup = bs(response.content, 'html.parser')
+                    soup = bs4.BeautifulSoup(response.content, 'html.parser')
                     self.last_soup = soup
                     return soup
             except (TimeoutError, requests.exceptions.ProxyError, IndexError, ConnectionResetError,
@@ -238,7 +229,7 @@ class Scraper:
                     if isinstance(e, IndexError):
                         self.masks = Snake(thread_count=self.thread_count).masks
             retries_left -= 1
-            sleep(RETRY_DELAY)
+            time.sleep(RETRY_DELAY)
 
     def has_mask(self):
         """Returns whether any masks are available."""

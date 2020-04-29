@@ -1,0 +1,48 @@
+{
+    "1602674": {
+        "pbp ID": 4654374,
+        "game time": "2018/11/06 19:00",
+        "location": "Doug Collins Court at Redbird Arena",
+        "attendance": 4764,
+        "referees": ["Mike O'Neill", "Roland Simmons", "Greg Rennegarbe"],
+        "team IDs": [450575, 450811, null, null],
+        "team names": ["Illinois St.", "FGCU", false],
+        "raw box 1": [1853705, true, "Carlyle, Christian", "*", "1", "33:00",
+          "1", "3", "", "1", "3", "4", "5", "2", "7", "9", "2", "4", "", "",
+          "3", ""]
+    },
+    "1610092": {
+        "pbp ID": 4738602,
+        "game time": "2019/01/05",
+        "location": "Elmore Gymnasium",
+        "attendance": 898,
+        "referees": [null, null, null],
+        "team IDs": [null, null, 6, 314],
+        "team names": ["Alabama A&M", "Jackson St.", false],
+        "raw box 1": [2099975, true, "Howell, Chris", "", "1", "38:00", "8",
+          "20", "", "3", "1", "2", "17", "4", "10", "14", "", "2", "2", "",
+          "2"]
+    },
+    "1614866": {
+        "pbp ID": 4696618,
+        "game time": "2019/02/04 19:00",
+        "location": null,
+        "attendance": 5251,
+        "referees": [null, null, null],
+        "team IDs": [null, null, 639, 220],
+        "team names": ["Siena", "Fairfield", false],
+        "raw box 1": [1968272, true, "Cruz, Jesus", "G", "1", "30:43", "2",
+          "9", "", "3", "1", "1", "5", "3", "2", "5", "3", "2", "", "", "3"]
+    },
+    "1605562": {
+        "pbp ID": 4666158,
+        "game time": "2018/11/24 16:00",
+        "location": "Princess Anne, Md. (Hytche Center)",
+        "attendance": 361,
+        "referees": ["Que'z Crawford", "Zakee Cook", "La'Kenneth Kindred"],
+        "team IDs": [null, null, 393, null],
+        "team names": ["UMES", "Central Penn", false],
+        "raw box 1": [null, true, "BAYLOR, Noah", "*", "1", "26:00", "4", "4",
+          "", "", "3", "4", "11", "2", "5", "7", "1", "2", "", "", "3"]
+    }
+}
