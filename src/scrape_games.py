@@ -930,9 +930,9 @@ def parse_semicolon_play(play, player):
             'in': " in" in play
         }
     elif "Team, jumpball" in play:                                        # possession arrow events
-        return parse_semicolon_possession_arrow(play, player)
+        return parse_semicolon_possession_arrow(play)
     elif "timeout " in play:                                              # timeouts
-        return parse_semicolon_timeout(play, player)
+        return parse_semicolon_timeout(play)
     elif ", foulon" in play:                                              # fouls received
         return {
             'player': player,
@@ -960,16 +960,16 @@ def parse_semicolon_play(play, player):
     elif " rebound" in play:                                              # rebounds
         return parse_semicolon_rebound(play, player)
     elif ", 2pt" in play:                                                 # 2-pointers
-        return parse_semicolon_three_pointer(play, player)
-    elif ", 3pt" in play:                                                 # 3-pointers
         return parse_semicolon_two_pointer(play, player)
+    elif ", 3pt" in play:                                                 # 3-pointers
+        return parse_semicolon_three_pointer(play, player)
     elif ", freethrow" in play:                                           # free throw attempts
         return parse_semicolon_free_throw(play, player)
     else:   # raise ValueError if the play type could not be identified
         raise ValueError(f"Unrecognized play type: '{play}'")
 
 
-def parse_semicolon_possession_arrow(play, player):
+def parse_semicolon_possession_arrow(play):
     """Parses a play in semicolon format involving a possession arrow event."""
     if " heldball" in play:
         jumpball_type = "held ball"
@@ -989,7 +989,7 @@ def parse_semicolon_possession_arrow(play, player):
     }
 
 
-def parse_semicolon_timeout(play, player):
+def parse_semicolon_timeout(play):
     """Parses a play in semicolon format involving a timeout."""
     if " commercial" in play:
         caller = "Floor"

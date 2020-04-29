@@ -53,6 +53,69 @@ correct_scoreboard_values = {
         'box IDs': [1609673, 1609674, 1609671, 1609672, 1609682, 1609680]
     }
 }
+correct_parsed_plays = {
+    "Jordan Kitchen, jumpball lost": {
+        'player': "Jordan Kitchen",
+        'action': "jump ball",
+        'success': False},
+    "Jashire Hardnett, 2pt jumpshot   missed": {
+        'player': "Jashire Hardnett",
+        'action': "shot",
+        'success': False,
+        'length': "long 2",
+        'type': "jump shot",
+        'second chance': False,
+        'fast break': False,
+        'blocked': False
+    },
+    "Jashire Hardnett, rebound offensive": {
+        'player': "Jashire Hardnett",
+        'action': "rebound",
+        'offensive': True,
+        'type': "live"
+    },
+    "Jashire Hardnett, 2pt jumpshot 2ndchance  missed": {
+        'player': "Jashire Hardnett",
+        'action': "shot",
+        'success': False,
+        'length': "long 2",
+        'type': "jump shot",
+        'second chance': True,
+        'fast break': False,
+        'blocked': False
+    },
+    "BJ Standley, rebound defensive": {
+        'player': "BJ Standley",
+        'action': "rebound",
+        'offensive': False,
+        'type': "live"
+    },
+    "BJ Standley, turnover offensive": {
+        'player': "BJ Standley",
+        'action': "turnover",
+        'type': "offensive foul",
+    },
+    "TJ Haws, 3pt jumpshot fromturnover  missed": {
+        'player': "TJ Haws",
+        'action': "shot",
+        'success': False,
+        'length': "3",
+        'type': "jump shot",
+        'second chance': False,
+        'fast break': False,
+        'blocked': False
+    },
+    "Luke Worthington, 2pt layup 2ndchance;fromturnover;pointsinthepaint  made": {
+        'player': "Luke Worthington",
+        'action': "shot",
+        'success': False,
+        'length': "short 2",
+        'type': "layup",
+        'second chance': True,
+        'fast break': False,
+        'blocked': False
+    }
+}
 
 
 # Below are functions that test the functions intended to gather raw information from BeautifulSoup
@@ -198,6 +261,20 @@ def test_score_name_similarity():
     assert sg.score_name_similarity("Longerfirst Last", "Longerfirst Last") == 28
 
 
+# Below are functions that test the functions that parse plays
+
+
+def test_parse_play():
+    for play in correct_parsed_plays:
+        try:
+            assert sg.parse_play(play) == correct_parsed_plays[play]
+        except AssertionError:
+            print("Assertion error in parsing play. Play:")
+            print(play)
+            print(sg.parse_play(play))
+            exit(1)
+
+
 # Below are functions that test functions for parsing plays from play-by-play logs.
 
 
@@ -215,6 +292,8 @@ def main():
     test_clean_stat()
     test_clean_centi_time()
     test_score_name_similarity()
+
+    test_parse_play()
 
     for date in correct_scoreboard_values:
         with open(f'webpages/scoreboard_{date}.html', 'r') as file:
