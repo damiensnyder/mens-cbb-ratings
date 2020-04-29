@@ -120,6 +120,11 @@ def test_clean_name():
     assert sg.clean_name("Last, Jr., First") == "First Last, Jr."
     assert sg.clean_name("Last,First") == "First Last"
     assert sg.clean_name("Last, Jr.,First") == "First Last, Jr."
+    assert sg.clean_name("D, R") == "R D"
+    assert sg.clean_name("LAST,FIRST") == "First Last"
+    assert sg.clean_name("LAST, FIRST") == "First Last"
+    assert sg.clean_name("LAST,CJ") == "CJ Last"
+    assert sg.clean_name("Last, First \"Nickname\"") == "First Last"
 
 
 def test_clean_position():
@@ -175,6 +180,12 @@ def test_clean_centi_time():
     assert sg.clean_centi_time('00:02:03') == 2.03
 
 
+def test_score_name_similarity():
+    assert sg.score_name_similarity("F L", "First Last") == 8
+    assert sg.score_name_similarity("First Last", "F L") == 8
+    assert sg.score_name_similarity("First Last", "Firs Last") == 9
+
+
 # Below are functions that test functions for parsing plays from play-by-play logs.
 
 
@@ -191,6 +202,7 @@ def main():
     test_clean_time()
     test_clean_stat()
     test_clean_centi_time()
+    test_score_name_similarity()
 
     for date in correct_scoreboard_values:
         with open(f'webpages/scoreboard_{date}.html', 'r') as file:

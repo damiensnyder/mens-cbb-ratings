@@ -446,14 +446,24 @@ def clean_name(name):
     name = re.sub('[^\x00-\x7f]', '', name)     # remove any non-ASCII characters
     while "  " in name:                         # remove double spaces
         name = name.replace("  ", " ")
+
+    # rearrange the name around the comma so the first name comes first
     index_last_comma = name.rfind(',')
     if (index_last_comma > 0) and (index_last_comma < len(name) - 1):
         if name[index_last_comma + 1] == " ":
-            return name[index_last_comma + 2:] + " " + name[:index_last_comma]
+            name = name[index_last_comma + 2:] + " " + name[:index_last_comma]
         else:
-            return name[index_last_comma + 1:] + " " + name[:index_last_comma]
-    else:
-        return name
+            name = name[index_last_comma + 1:] + " " + name[:index_last_comma]
+
+    # remove any all caps words 3 letters or longer
+    all_caps_segments = re.findall("[A-Z]{3,}", name)
+    for segment in all_caps_segments:
+        name = name.replace(segment, segment.title())
+
+    # remove any nicknames in quotes
+    name = re.sub(" \".+\" ", " ", name)
+
+    return name
 
 
 def identify_player(player_id, name, roster):
@@ -541,9 +551,16 @@ def score_name_similarity(name1, name2):
     name2 = name2.lower().replace('.', '')
 
     similarity = -abs(len(name1) - len(name2))
-    for i in range(len(name1) - 3):
+    for i in range(len(name1) - 2):
         if name1[i:i + 3] in name2:
             similarity += 2
+
+    # if either name is only initials, assign a score of 8 if the names have the same initials
+    if (len(name1) == 3) or (len(name2) == 3):
+        index_space1 = name1.index(" ")
+        index_space2 = name2.index(" ")
+        if (name1[0] == name2[0]) and (name1[index_space1 + 1] == name2[index_space2 + 1]):
+            return 8
 
     return similarity
 
