@@ -1168,12 +1168,9 @@ def parse_semicolon_possession_arrow(play):
         'player': 'Team'
         'action': 'possession arrow'
         'type': The incident that caused the possession arrow event. Possible
-            values are "held ball", "block tie-up", "lodged ball", and "out of
-            bounds".
-
-    Raises:
-        ValueError: If the type of possession arrow event could not be
-            identified."""
+            values are "held ball", "block tie-up", "lodged ball", "out of
+            bounds", and None (if the type of possession arrow incident could
+            not be identified)."""
     if " heldball" in play:
         jumpball_type = "held ball"
     elif " blocktieup" in play:
@@ -1183,7 +1180,7 @@ def parse_semicolon_possession_arrow(play):
     elif " outofbounds" in play:
         jumpball_type = "out of bounds"
     else:
-        raise ValueError(f"Unknown possession arrow event type: '{play}'")
+        jumpball_type = None
 
     return {
         'player': "Team",
@@ -1202,11 +1199,9 @@ def parse_semicolon_timeout(play):
         A dict with the following keys and values:
         'player': 'Team' if a team called the timeout, otherwise 'Floor'.
         'action': 'timeout'
-        'type': The type of timeout. Possible values are "short", "full",
-            and "media".
-
-    Raises:
-        ValueError: If the type of timeout could not be identified."""
+        'flag 1': The type of timeout. Possible values are "short", "full",
+            "media", and None (if the type of timeout could not be
+            identified)."""
     if " commercial" in play:
         caller = "Floor"
         timeout_type = "media"
@@ -1217,17 +1212,33 @@ def parse_semicolon_timeout(play):
         caller = "Team"
         timeout_type = "short"
     else:
-        raise ValueError(f"Unrecognized timeout type: '{play}'")
+        timeout_type = None
 
     return {
         'player': caller,
         'action': "timeout",
-        'type': timeout_type
+        'flag 1': timeout_type
     }
 
 
 def parse_semicolon_foul_committed(play, player):
-    """Parses a play in semicolon format involving a foul committed."""
+    """Parses a play in semicolon format involving a foul committed.
+
+    Args:
+        play: The text of a play in semicolon format, as written.
+        player: The player who committed the foul in the play.
+
+    Returns:
+        A dict with the following keys and values:
+        'player': The player who committed the foul in the play.
+        'action': 'foul committed'
+        'flag 1': The type of foul. Possible values are "personal",
+            "offensive", "bench technical, class A", "bench admin technical,
+            class B", "technical, class A", "technical, flagrant 2", "double
+            technical", "double coach technical", "coach technical, class A",
+            "coach admin technical, class B", "deadball contact technical",
+            "administrative admin technical", "admin technical, class B", and
+            None (if the type of foul committed could not be identified)."""
     if " personal" in play:
         foul_type = "personal"
     elif " offensive" in play:
@@ -1260,12 +1271,27 @@ def parse_semicolon_foul_committed(play, player):
     return {
         'player': player,
         'action': "foul committed",
-        'type': foul_type
+        'flag 1': foul_type
     }
 
 
 def parse_semicolon_turnover(play, player):
-    """Parses a play in semicolon format involving a turnover."""
+    """Parses a play in semicolon format involving a turnover.
+
+    Args:
+        play: The text of a play in semicolon format, as written.
+        player: The player who turned the ball over in the play.
+
+    Returns:
+        A dict with the following keys and values:
+        'player': The player who turned the ball over in the play.
+        'action': 'turnover'
+        'flag 1': The type of turnover. Possible values are "travel", "bad
+            pass", "lost ball", "offensive foul", "3-second violation", "shot
+            clock violation", "double dribble", "5-second violation",
+            "10-second violation", "lane violation", "other" (an actual type
+            notated by scorekeepers), and None (if the type of turnover could
+            not be identified)."""
     if " travel" in play:
         turnover_type = "travel"
     elif " badpass" in play:
@@ -1294,34 +1320,61 @@ def parse_semicolon_turnover(play, player):
     return {
         'player': player,
         'action': "turnover",
-        'type': turnover_type
+        'flag 1': turnover_type
     }
 
 
 def parse_semicolon_rebound(play, player):
-    """Parses a play in semicolon format involving a rebound."""
+    """Parses a play in semicolon format involving a rebound.
+
+    Args:
+        play: The text of a play in semicolon format, as written.
+        player: The player who rebounded the ball in the play.
+
+    Returns:
+        A dict with the following keys and values:
+        'player': The player who rebounded the ball in the play.
+        'action': 'rebound'
+        'flag 3': Whether the rebound was offensive (None if it could not be
+            determined).
+        'flag 4': Whether the rebound was a deadball rebound."""
     if " offensive" in play:
         was_offensive = True
     elif " defensive" in play:
         was_offensive = False
     else:
-        raise ValueError(f"unrecognized rebound type: '{play}'")
-
-    if "deadball" in play:
-        rebound_type = "deadball"
-    else:
-        rebound_type = "live"
+        was_offensive = None
 
     return {
         'player': player,
         'action': "rebound",
-        'offensive': was_offensive,
-        'type': rebound_type
+        'flag 3': was_offensive,
+        'flag 4': "deadball" in play
     }
 
 
 def parse_semicolon_two_pointer(play, player):
-    """Parses a play in semicolon format involving a two-point attempt."""
+    """Parses a play in semicolon format involving a two-point attempt.
+
+    Args:
+        play: The text of a play in semicolon format, as written.
+        player: The player who shot the ball in the play.
+
+    Returns:
+        A dict with the following keys and values:
+        'player': The player who shot the ball in the play.
+        'action': 'shot'
+        'flag 1': The type of shot. Possible values are "jump shot", "pull-up
+            jump shot", "step-back jump shot", "turn-around jump shot", "hook
+            shot", "layup", "dunk", "driving layup", "alley-oop", and None
+            (if the type of shot could not be identified).
+        'flag 2': The length of the shot. Possible values are "short 2" and
+            "long 2", though three-pointers are labeled as "shot" and use the
+            flag 2 to indicate "3".
+        'flag 3': Whether the shot was made.
+        'flag 4': Whether the points were second-chance points.
+        'flag 5': Whether the points were scored in transition.
+        'flag 6': Whether the shot was blocked."""
     if "pointsinthepaint" in play:
         shot_length = "short 2"
     else:
@@ -1346,22 +1399,40 @@ def parse_semicolon_two_pointer(play, player):
     elif " alleyoop " in play:
         shot_type = "alley-oop"
     else:
-        raise ValueError(f"unrecognized shot type: '{play}'")
+        shot_type = None
 
     return {
         'player': player,
         'action': "shot",
-        'success': " made" in play,
-        'length': shot_length,
-        'type': shot_type,
-        'second chance': "2ndchance" in play,
-        'fast break': "fastbreak" in play,
-        'blocked': "blocked" in play
+        'flag 1': shot_type,
+        'flag 2': shot_length,
+        'flag 3': " made" in play,
+        'flag 4': "2ndchance" in play,
+        'flag 5': "fastbreak" in play,
+        'flag 6': "blocked" in play
     }
 
 
 def parse_semicolon_three_pointer(play, player):
-    """Parses a play in semicolon format involving a three-point attempt."""
+    """Parses a play in semicolon format involving a three-point attempt.
+
+    Args:
+        play: The text of a play in semicolon format, as written.
+        player: The player who shot the ball in the play.
+
+    Returns:
+        A dict with the following keys and values:
+        'player': The player who shot the ball in the play.
+        'action': 'shot'
+        'flag 1': The type of shot. Possible values are "jump shot", "pull-up
+            jump shot", "step-back jump shot", "turn-around jump shot", and
+            None (if the type of shot could not be identified).
+        'flag 2': "3". Two-pointers are also labeled as "shot" and use the
+            flag 2 to indicate "short 2" or "long 2".
+        'flag 3': Whether the shot was made.
+        'flag 4': Whether the points were second-chance points.
+        'flag 5': Whether the points were scored in transition.
+        'flag 6': Whether the shot was blocked."""
     if " jumpshot " in play:
         shot_type = "jump shot"
     elif " pullupjumpshot " in play:
@@ -1371,7 +1442,7 @@ def parse_semicolon_three_pointer(play, player):
     elif " stepbackjumpshot " in play:
         shot_type = "step-back jump shot"
     else:
-        raise ValueError(f"unrecognized shot type: '{play}'")
+        shot_type = None
 
     return {
         'player': player,
@@ -1386,7 +1457,20 @@ def parse_semicolon_three_pointer(play, player):
 
 
 def parse_semicolon_free_throw(play, player):
-    """Parses a play in semicolon format involving a free throw attempt."""
+    """Parses a play in semicolon format involving a free-throw attempt.
+
+    Args:
+        play: The text of a play in semicolon format, as written.
+        player: The player who attempted the free throw in the play.
+
+    Returns:
+        A dict with the following keys and values:
+        'player': The player who attempted the free throw in the play.
+        'action': 'free throw'
+        'flag 3': Whether the free throw was made.
+        'flag 4': Whether the points were second-chance points.
+        'flag 5': Whether the points were scored in transition.
+        'flag 6': Whether the shot was blocked."""
     index_ft = play.index(", freethrow")
 
     return {
