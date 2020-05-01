@@ -1212,6 +1212,7 @@ def parse_semicolon_timeout(play):
         caller = "Team"
         timeout_type = "short"
     else:
+        caller = None
         timeout_type = None
 
     return {
@@ -1487,11 +1488,17 @@ def parse_semicolon_free_throw(play, player):
 
 
 def track_shot_clock(plays, max_shot_clock=30, orb_to_20=True):
-    """Given the parsed list of plays in a game, track how many seconds were on the shot clock
-    when each event happened and add that information to the dict of the play. orb_to_20 refers to
-    the rule added in the 2018–19 season wherein the shot clock resets to 20 seconds, not 30, after
-    offensive rebounds. max_shot_clock is set by default to 30, but before 2013ish the shot clock
-    was 35 seconds."""
+    """Tracks the number of seconds on the shot clock when each event happened
+    and adds the shot clock to the dict of each play at the index 'shot clock'.
+
+    Args:
+        plays: The parsed list of plays in the game, as a list of dicts.
+        max_shot_clock: The number of seconds the shot clock resets to
+            normally. Was formerly 35.
+        orb_to_20: Whether the shot clock resets to 20 seconds after an
+            offensive rebound. Before the 2018–19 season the shot clock always
+            reset to the maximum after offensive rebounds, so this should be
+            set to false for seasons before 2019."""
     shot_clock = max_shot_clock
     last_play_time = 1200
     shot_clock_end = 1200 - shot_clock
@@ -1512,8 +1519,15 @@ def track_shot_clock(plays, max_shot_clock=30, orb_to_20=True):
 
 
 def track_partic(plays):
-    """Given the parsed plays of a game in a list, track which players were on the court during
-    each play and record participation in each play's dict."""
+    """Tracks which players were on the court during each play and records
+    participation in each play's dict. Constructs lists of the players (as
+    dicts of 'player ID' and 'name') and adds the list of home players on the
+    court for a play to the play at the index 'home partic' and away players
+    at 'away partic'. Outputs may not have exactly 5 players per team if there
+    are errors in the scorekeeping; this is corrected by correct_minutes.
+
+    Args:
+        plays: The parsed list of plays in the game, as a list of dicts."""
     h_partic = []
     a_partic = []
     backfilled = []
@@ -1596,8 +1610,15 @@ def track_partic(plays):
 
 
 def correct_minutes(boxes, plays):
-    """Fix plays with not exactly 5 players per team by checking who is listed as playing more or
-    fewer minutes in the box score than is reflected in the play-by-play."""
+    """Fixes plays that don't have exactly 5 players listed as on the court for
+    each team by checking who is listed as playing more or fewer minutes in the
+    box score than is reflected in the play-by-play. Adds or removes players
+    from to the list of participating players on their teams for the plays it
+    is suspected they were misrecorded on. Each player is a dict.
+
+    Args:
+        plays: The parsed list of plays in the game, as a list of dicts.
+        boxes: The parsed list of boxes in the game, as a list of dicts."""
     # make dicts of player name -> time played for each team
     h_minutes = dict([[player['name'], player['time played']] for player in boxes
                              if (player['name'] != "Team") and not player['is away']])
