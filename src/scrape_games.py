@@ -26,6 +26,7 @@ YEAR_DIVISIONS = [
 CLOCK_RESETTING_ACTIONS = ["jump ball", "possession arrow", "shot", "turnover", "steal",
                            "foul committed", "free throw"]
 
+PATH_DATABASE_INFO = "../src/db_info.txt"
 UPLOAD_GAME_QUERY = "INSERT INTO games (game_id, h_team_season_id, a_team_season_id, h_name," \
                     "a_name, start_time, location, attendance, referee1, referee2, referee3," \
                     "is_exhibition) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);"
@@ -534,23 +535,39 @@ def clean_raw_boxes(raw_boxes, home_roster, away_roster):
 
 
 def clean_single_box(raw_box, roster):
-    """Take a single raw stat line in a box score and transform it into a dict with usably clean
-    values."""
-    box = {
-        'is away': raw_box[1]
-    }
+    """Transform a single raw stat line in a box score into a usable dict.
 
-    # since teams do not have player IDs, positions, or playtime, collect those only for actual
-    # players and merely record that the team stats come from "Team"
-    if raw_box[2].strip().lower() == "team":
+    Args:
+        raw_box: A raw stat line from a box score, as a list.
+        roster: The roster of the team the player plays on, as a list of dicts.
+
+    Returns:
+        A dict with the keys and values:
+        'is away': Whether the player is on the away team.
+        'name': The player's name. ("Team" for team)
+        'player ID': The player's player ID. (None for team)
+        'position': The player's position, or None if it couldn't be
+            identified or it is Team.
+        'time played': The number of seconds the player played.
+        'FGM', 'FGA', '3PM', '3PA', 'FTM', 'FTA', 'ORB', 'DRB', 'AST', 'TOV',
+        'STL', 'BLK', 'PF': The number of each of those stats the player
+            accumulated."""
+    box = {'is away': raw_box[1]}
+
+    # since teams do not have player IDs, positions, or playtime, collect those
+    # only for actual players and merely record that the team stats come from
+    # "Team".
+    raw_box[2] = raw_box[2].strip()
+    if raw_box[2].lower() == "team":
         box['name'] = "Team"
+        box['player ID'] = None
+        raw_box['position'] = None
+        box['time played'] = None
     else:
         player = identify_player(raw_box[0], clean_name(raw_box[2]), roster)
         box['player ID'] = player['player ID']
         box['name'] = player['name']
-        position = clean_position(raw_box[3])
-        if position is not None:
-            raw_box['position'] = position
+        raw_box['position'] = clean_position(raw_box[3])
         box['time played'] = clean_time(raw_box[5])
 
     box['FGM'] = clean_stat(raw_box[6])
@@ -646,8 +663,15 @@ def identify_player(player_id, name, roster):
 
 
 def clean_position(raw_position):
-    """Given a string (or other value) possibly representing a player's position, return 'G' if
-    they are a guard, 'F' if they are a forward, 'C' if they are a center, and None otherwise."""
+    """Convert messy representations (or lack thereof) of positions to single
+    characters representing them.
+
+    Args:
+        raw_position: The raw string of the player listed position.
+
+    Returns:
+        'G' if the player was a guard, 'F' if they were a forward, 'C' if they
+        were a center, and None otherwise."""
     if isinstance(raw_position, str):
         raw_position = raw_position.lower()
         if "g" in raw_position:
@@ -661,9 +685,15 @@ def clean_position(raw_position):
 
 
 def clean_time(raw_time):
-    """Converts a string representing a duration in minutes and seconds to the number of total
-    seconds. For example, clean_time('1:42') would return 102. If the value passed in is not a
-    string or is not in M:SS format, returns 0."""
+    """Converts a string representing a duration in minutes and seconds to the
+    number of total seconds.
+
+    Args:
+        raw_time: A raw string representing a duration. (e.g. '1:42', '12:16')
+
+    Returns:
+        The number of seconds in that duration as an int. If the value is not a
+        string or is not in M:SS format, returns 0."""
     if isinstance(raw_time, str):
         index_first_colon = raw_time.find(':')
         if index_first_colon > 0:
@@ -711,8 +741,13 @@ def score_name_similarity(name1, name2):
 
 
 def connect_to_db():
-    """Open and return a connection to the database as specified in a txt file."""
-    with open('../src/db_info.txt', 'r') as db_info_file:
+    """Opens and returns a connection to the database as specified in a txt
+    file.
+
+    Returns:
+        A pymysql connection to the database specified in the text file
+        PATH_DATABASE_INFO."""
+    with open(PATH_DATABASE_INFO, 'r') as db_info_file:
         host = db_info_file.readline()[:-1]
         user = db_info_file.readline()[:-1]
         password = db_info_file.readline()[:-1]
@@ -721,15 +756,28 @@ def connect_to_db():
 
 
 def fetch_division_code(cursor, year):
-    """Get the player ID and name of each player on the team with the given team season ID or the
-    given school ID and year."""
+    """Fetches the division code of the given year.
+
+    Args:
+        cursor: The cursor of the pymysql database connection.
+        year: The year of which you want to fetch the division code.
+
+    Returns:
+        The NCAA division code of the given year."""
     cursor.execute(FETCH_DIVISION_CODE_QUERY, (year,))
     return cursor.fetchone()[0]
 
 
 def fetch_roster(cursor, team_season_id, school_id, year):
-    """Get the player ID and name of each player on the team with the given team season ID or the
-    given school ID and year."""
+    """Get the player ID and name of each player on the team with the given
+    team season ID or the given school ID and year. Either team season ID or
+    (school ID and year) needs to be specified, but not both.
+
+    Args:
+        cursor: The cursor of the pymysql database connection.
+        team_season_id: The team season ID of the desired team season.
+        school_id: The school ID of the desired team season.
+        year: The year of the desired team season."""
     if team_season_id is None:
         if school_id is None:
             return []   # return an empty list if the team is has no ID of either type
