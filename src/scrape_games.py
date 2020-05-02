@@ -516,8 +516,9 @@ def find_raw_plays(soup):
     return plays
 
 
-# Below are functions dedicated to cleaning values found by the raw box score parsing functions,
-# specifically parsing the actual box scores themselves and not the game metadata.
+# Below are functions dedicated to cleaning values found by the raw box score
+# parsing functions, specifically parsing the actual box scores themselves and
+# not the game metadata.
 
 
 def clean_raw_boxes(raw_boxes, home_roster, away_roster):
@@ -1261,7 +1262,8 @@ def parse_caps_shot(play, player):
     }
 
 
-# Below are functions dedicated to parsing plays in the 'semicolon' notation format.
+# Below are functions dedicated to parsing plays in the 'semicolon' notation
+# format.
 
 
 def parse_semicolon_play(play, player):
@@ -1644,7 +1646,6 @@ def parse_semicolon_three_pointer(play, player):
         'fast break': "fastbreak" in play,
         'blocked': "blocked" in play
     }
-
 
 
 # Below are functions dedicated to cleaning and preprocessing parsed
