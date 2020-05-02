@@ -872,55 +872,99 @@ def parse_play_row(play_row):
 
 
 def parse_play(play):
-    """Parse only the text of the play and return as a dict."""
+    """Parse the text of a play and return the information about it.
+
+    Args:
+        play: The text of the play, as written."""
     notation_info = get_notation_style(play)
-    if notation_info['style'] == 'semicolon':
+    if notation_info is None:
+        return None
+    elif notation_info['is caps']:
+        return parse_caps_play(notation_info['play'], notation_info['player'])
+    else:
         return parse_semicolon_play(play, notation_info['player'])
-    elif notation_info['style'] == 'caps':
-        return parse_caps_play(notation_info['player'], notation_info['rest'])
 
 
 def get_notation_style(play):
-    """Detect the notation style and separates the name of the player from the rest of the play."""
+    """Detects the notation style and separates the name of the player from the
+    rest of the play.
+
+    Args:
+        play: The text of the play, as written.
+
+    Returns:
+        A dict with keys and values:
+        'is caps': True if the play is in caps format, False if it is in
+            semicolon format. These are the two notation styles used by the
+            NCAA in scorekeeping and must be parsed differently.
+        'play': The text of the play, excluding the name of the player.
+        'player': The player mentioned in the play. Alternatively, 'Team' if
+            a team did the action in the play."""
     play = play.replace("UNKNOWN", "")
+    while "  " in play:  # trim consecutive spaces to single spaces
+        play = play.replace("  ", " ")
     index_comma1 = play.find(",")
     index_comma2 = play.find(", ")
+
+    # find the index of the first lowercase letter or number. if there are no
+    # lowercase letters or numbers in the play, set the index to just over the
+    # threshold to be detected as a caps play.
     try:
         index_first_lower = play.index(re.findall("[a-z]|[0-9]", play)[0])
     except IndexError:
         index_first_lower = 7
+
+    # if the first lowercase letter is more than 6 characters into the play, it
+    # is a caps play, and the play begins just after at the first space before
+    # that lowercase letter.
     if index_first_lower > 6:
-        notation_style = "caps"
+        is_caps = "caps"
         index_name_end = play[:index_first_lower].rfind(" ") + 1
         player = (play[index_comma1 + 1:index_name_end] + play[0:index_comma1]).title()
-        rest = play[index_name_end:].lower()
-    elif (play[0:4] == "TEAM") or (play[0:4] == "null") or (play[0:4] == "team"):
-        notation_style = "caps"
+        play = play[index_name_end:].lower()
+
+    # if the play is not identified as caps but starts with "TEAM", "null", or
+    # "team", it is a caps play and the player is "Team".
+    elif (play[0:4] == "TEAM") \
+            or (play[0:4] == "null") \
+            or (play[0:4] == "team"):
+        is_caps = "caps"
         player = "Team"
-        while "  " in play:
-            play = play.replace("  ", " ")
         index_name_end = 5
+
+        # sometimes the string "Team" appears later in the play also. if so,
+        # set the start of the play to just after that word.
         if "Team" in play:
             index_name_end = play.index("Team") + 5
-        rest = play[index_name_end:].lower()
+        play = play[index_name_end:].lower()
+
+    # if the play starts with "TM" or starts with 2 numbers, it is a caps play.
+    # if "TM", the player is "Team", and if it starts with 2 numbers, it is
+    # probably a player but they can't be identified so set them to "Team" as
+    # well.
     elif (play[0:3] == "TM ") \
-            or ((play[0] >= "0") and (play[0] <= "9") and (play[1] >= "0") and (play[2] <= "9")):
-        notation_style = "caps"
+            or ((play[0] in "0123456789") and (play[1] in "0123456789")):
+        is_caps = True
         player = "Team"
         while "  " in play:
             play = play.replace("  ", " ")
-        rest = play[3:].lower()
+        play = play[3:].lower()
+
+    # if it has two commas or no commas, it is a semicolon play, and the
+    # play part starts after the second comma.
     elif (index_comma2 > 0) or (index_comma1 < 0):
-        notation_style = "semicolon"
+        is_caps = False
         player = play[0:index_comma2]
-        rest = play[index_comma2:]
+        play = play[index_comma2:]
+
+    # if no play could be identified, return None
     else:
-        raise ValueError(f"Unrecognized notation style: '{play}'")
+        return None
 
     return {
-        'style': notation_style,
-        'player': player,
-        'rest': rest
+        'is caps': is_caps,
+        'play': play,
+        'player': player
     }
 
 
@@ -959,141 +1003,211 @@ def clean_score(score):
 # Below are functions dedicated to parsing plays in the 'caps' notation format.
 
 
-def parse_caps_play(player, rest):
-    """Parses a play in the 'caps' notation style."""
-    if "blocked shot" in rest:                      # blocks
+def parse_caps_play(play, player):
+    """Parses a play in caps format.
+
+    Args:
+        play: The text of a play in caps format, as written, excluding the name
+            of the player in the play.
+        player: The player named in the play.
+
+    Returns:
+        A dict with the following keys and values:
+        'player': The player who did the action in the play.
+        'action': The action performed in the play. (e.g., "shot")
+        'flag 1': The type of that action, if applicable. (e.g., "layup")
+        'flag 2': The length of the shot, if the play was a shot. Otherwise
+            this field is not included
+        'flag 3': Whether the shot went in, the player was subbed in, or the
+            rebound was offensive, depending on the action. Not included if it
+            does not apply to the action.
+        'flag 4': Whether the shot was a second-chance shot, or whether the
+            rebound was a deadball rebound, if applicable.
+        'flag 5': Whether the shot was in in transition, if applicable.
+        'flag 6': Whether the shot was blocked, if applicable."""
+    if "blocked shot" in play:  # blocks
         return {
             'player': player,
             'action': "block"
         }
-    elif " rebound" in rest:                        # rebounds
-        return parse_caps_rebound(player, rest)
-    elif "turnover" in rest:                        # turnovers
+    elif " rebound" in play:    # rebounds
+        return parse_caps_rebound(play, player)
+    elif "turnover" in play:    # turnovers
         return {
             'player': player,
             'action': "turnover"
         }
-    elif "steal" in rest:                           # steals
+    elif "steal" in play:   # steals
         return {
             'player': player,
             'action': "steal"
         }
-    elif "timeout" in rest:                         # timeouts
-        return parse_caps_timeout(rest)
-    elif "assist" in rest:                          # assists
+    elif "timeout" in play:     # timeouts
+        return parse_caps_timeout(play)
+    elif "assist" in play:  # assists
         return {
             'player': player,
             'action': "assist"
         }
-    elif "commits foul" in rest:                    # fouls committed
+    elif "commits foul" in play:    # fouls committed
         return {
             'player': player,
             'action': "foul committed"
         }
-    elif " game" in rest:                           # substitutions
+    elif " game" in play:   # substitutions
         return {
             'player': player,
             'action': "substitution",
-            'in': "enters" in rest
+            'flag 3': "enters" in play
         }
-    elif "free throw" in rest:                      # free throws
+    elif "free throw" in play:  # free throws
         return {
             'player': player,
             'action': "free throw",
-            'success': "made" in rest,
-            'number': None,
-            'out of': None
+            'flag 3': "made" in play
         }
-    elif ("missed " in rest) or ("made " in rest):  # shots
-        return parse_caps_shot(player, rest)
+    elif ("missed " in play) or ("made " in play):  # shots
+        return parse_caps_shot(play, player)
     else:   # if no play type found, try parsing as a semicolon play
-        return parse_semicolon_play(rest, player)
+        return parse_semicolon_play(play, player)
 
 
-def parse_caps_rebound(player, rest):
-    """Parses a play in caps format involving a rebound."""
-    if "offensive" in rest:
+def parse_caps_rebound(play, player):
+    """Parses a play in caps format involving a rebound.
+
+    Args:
+        play: The text of a play in caps format, as written, without the
+            player's name.
+        player: The player who rebounded the ball in the play.
+
+    Returns:
+        A dict with the following keys and values:
+        'player': The player who rebounded the ball in the play.
+        'action': 'rebound'
+        'flag 3': Whether the rebound was offensive (None if it could not be
+            determined).
+        'flag 4': Whether the rebound was a deadball rebound."""
+    if "offensive" in play:
         was_offensive = True
-        rebound_type = "live"
-    elif "defensive" in rest:
+        was_deadball = False
+    elif "defensive" in play:
         was_offensive = False
-        rebound_type = "live"
-    elif "deadball" in rest:
+        was_deadball = False
+    elif "deadball" in play:
         was_offensive = None
-        rebound_type = "dead ball"
+        was_deadball = True
     else:
-        raise ValueError(f"Unrecognized rebound type: '{rest}'")
+        was_deadball = None
+        was_offensive = None
 
     return {
-            'player': player,
-            'action': "rebound",
-            'offensive': was_offensive,
-            'type': rebound_type
-        }
+        'player': player,
+        'action': "rebound",
+        'flag 3': was_offensive,
+        'flag 4': was_deadball
+    }
 
 
-def parse_caps_timeout(rest):
-    """Parses a play in caps format involving a timeout."""
-    if "media" in rest:
+def parse_caps_timeout(play):
+    """Parses a play in caps format involving a timeout.
+
+    Args:
+        play: The text of a play in caps format, as written.
+
+    Returns:
+        A dict with the following keys and values:
+        'player': 'Team' if a team called the timeout, 'Floor' for media
+            timeouts, and None if the caller could not be identified.
+        'action': 'timeout'
+        'flag 1': The type of timeout. Possible values are "short", "full",
+            "media", and None (if the type of timeout could not be
+            identified)."""
+    if "media" in play:
         caller = "Floor"
         timeout_type = "media"
-    elif "20" in rest:
+    elif "20" in play:
         caller = "Team"
         timeout_type = "short"
-    elif "30" in rest:
+    elif "30" in play:
         caller = "Team"
         timeout_type = "full"
-    elif "short" in rest:
+    elif "short" in play:
         caller = "Team"
         timeout_type = "short"
-    elif "full" in rest:
+    elif "full" in play:
         caller = "Team"
         timeout_type = "full"
-    elif (rest == "timeout") or (rest == "team timeout"):
+    elif (play == "timeout") or (play == "team timeout"):
         caller = "Team"
-        timeout_type = "unknown"
+        timeout_type = None
     else:
-        raise ValueError(f"Unrecognized timeout type: '{rest}'")
+        caller = None
+        timeout_type = None
 
     return {
         'player': caller,
         'action': "timeout",
-        'type': timeout_type
+        'flag 1': timeout_type
     }
 
 
-def parse_caps_shot(player, rest):
-    """Parses a play in caps format involving a field goal attempt."""
-    if " three point" in rest:
+def parse_caps_shot(play, player):
+    """Parses a play in caps format involving a field goal attempt.
+
+    Args:
+        play: The text of a play in caps format, as written, not including the
+            player's name.
+        player: The player who shot the ball in the play.
+
+    Returns:
+        A dict with the following keys and values:
+        'player': The player who shot the ball in the play.
+        'action': 'shot'
+        'flag 1': The type of shot. Possible values are "jump shot", "layup",
+            "dunk", and None (if the type of shot could not be identified),
+            though "pull-up jump shot", "step-back jump shot", "turn-around
+            jump shot", "hook shot", "driving layup", and "alley-oop" an be
+            returned from semicolon notation plays.
+        'flag 2': The length of the shot. Possible values are "short 2", "long
+            2", and "3".
+        'flag 3': Whether the shot was made.
+        'flag 4': Whether the points were second-chance points.
+        'flag 5': Whether the points were scored in transition.
+        'flag 6': Whether the shot was blocked."""
+    if " three point" in play:
         shot_length = "3"
-    elif " jumper" in rest:
+    elif " jumper" in play:
         shot_length = "long 2"
     else:
         shot_length = "short 2"
 
     second_chance = None
+    if " made " in play:
+        blocked = False
+    else:
+        blocked = None
 
-    if " layup" in rest:
+    if " layup" in play:
         shot_type = "layup"
-    elif " jumper" in rest:
+    elif " jumper" in play:
         shot_type = "jump shot"
-    elif " tip in" in rest:
+    elif " tip in" in play:
         shot_type = "layup"
         second_chance = True
-    elif " dunk" in rest:
+    elif " dunk" in play:
         shot_type = "dunk"
     else:
-        raise ValueError(f"Unrecognized shot type '{rest}'.")
+        shot_type = None
 
     return {
         'player': player,
         'action': "shot",
-        'success': " made " in rest,
-        'length': shot_length,
-        'type': shot_type,
-        'second chance': second_chance,
-        'fast break': None,
-        'blocked': None
+        'flag 1': shot_type,
+        'flag 2': shot_length,
+        'flag 3': " made " in play,
+        'flag 4': second_chance,
+        'flag 5': None,
+        'flag 6': blocked
     }
 
 
@@ -1101,32 +1215,53 @@ def parse_caps_shot(player, rest):
 
 
 def parse_semicolon_play(play, player):
-    """Parses a play in the 'semicolon' notation style."""
-    if ("period start" in play) or ("game start" in play) or "jumpball startperiod" in play \
+    """Parses a play in semicolon format.
+
+    Args:
+        play: The text of a play in semicolon format, as written.
+        player: The player named in the play.
+
+    Returns:
+        A dict with the following keys and values:
+        'player': The player who did the action in the play.
+        'action': The action performed in the play. (e.g., "shot")
+        'flag 1': The type of that action, if applicable. (e.g., "layup")
+        'flag 2': The length of the shot, if the play was a shot. Otherwise
+            this field is not included
+        'flag 3': Whether the shot went in, the player was subbed in, or the
+            rebound was offensive, depending on the action. Not included if it
+            does not apply to the action.
+        'flag 4': Whether the shot was a second-chance shot, or whether the
+            rebound was a deadball rebound, if applicable.
+        'flag 5': Whether the shot was in in transition, if applicable.
+        'flag 6': Whether the shot was blocked, if applicable."""
+    if ("period start" in play) \
+            or ("game start" in play) \
+            or "jumpball startperiod" in play \
             or ("period end" in play) or ("game end" in play):
         return None     # ignore the starts and ends of periods
     elif (", jumpball" in play) and ((" won" in play) or (" lost" in play)):    # jump balls
         return {
             'player': player,
             'action': "jump ball",
-            'success': " won" in play
+            'flag 3': " won" in play
         }
     elif ", substitution" in play:                                        # substitutions
         return {
             'player': player,
             'action': "substitution",
-            'in': " in" in play
+            'flag 3': " in" in play
         }
-    elif "Team, jumpball" in play:                                        # possession arrow events
+    elif "Team, jumpball" in play:  # possession arrow events
         return parse_semicolon_possession_arrow(play)
-    elif "timeout " in play:                                              # timeouts
+    elif "timeout " in play:    # timeouts
         return parse_semicolon_timeout(play)
     elif ", foulon" in play:                                              # fouls received
         return {
             'player': player,
             'action': "foul received"
         }
-    elif ", foul" in play:                                                # fouls committed
+    elif ", foul" in play:  # fouls committed
         return parse_semicolon_foul_committed(play, player)
     elif ", block" in play:                                               # blocks
         return {
@@ -1143,18 +1278,22 @@ def parse_semicolon_play(play, player):
             'player': player,
             'action': "steal"
         }
-    elif ", turnover" in play:                                            # turnovers
+    elif ", turnover" in play:  # turnovers
         return parse_semicolon_turnover(play, player)
-    elif " rebound" in play:                                              # rebounds
+    elif " rebound" in play:    # rebounds
         return parse_semicolon_rebound(play, player)
-    elif ", 2pt" in play:                                                 # 2-pointers
+    elif ", 2pt" in play:   # 2-pointers
         return parse_semicolon_two_pointer(play, player)
-    elif ", 3pt" in play:                                                 # 3-pointers
+    elif ", 3pt" in play:   # 3-pointers
         return parse_semicolon_three_pointer(play, player)
-    elif ", freethrow" in play:                                           # free throw attempts
-        return parse_semicolon_free_throw(play, player)
+    elif ", freethrow" in play:     # free throw attempts
+        return {
+            'player': player,
+            'action': "free throw",
+            'flag 3': " made" in play
+        }
     else:   # raise ValueError if the play type could not be identified
-        raise ValueError(f"Unrecognized play type: '{play}'")
+        return None
 
 
 def parse_semicolon_possession_arrow(play):
@@ -1190,7 +1329,7 @@ def parse_semicolon_possession_arrow(play):
 
 
 def parse_semicolon_timeout(play):
-    """Parses a play in semicolon format involving a possession arrow event.
+    """Parses a play in semicolon format involving a timeout.
 
     Args:
         play: The text of a play in semicolon format, as written.
@@ -1457,31 +1596,6 @@ def parse_semicolon_three_pointer(play, player):
     }
 
 
-def parse_semicolon_free_throw(play, player):
-    """Parses a play in semicolon format involving a free-throw attempt.
-
-    Args:
-        play: The text of a play in semicolon format, as written.
-        player: The player who attempted the free throw in the play.
-
-    Returns:
-        A dict with the following keys and values:
-        'player': The player who attempted the free throw in the play.
-        'action': 'free throw'
-        'flag 3': Whether the free throw was made.
-        'flag 4': Whether the points were second-chance points.
-        'flag 5': Whether the points were scored in transition.
-        'flag 6': Whether the shot was blocked."""
-    index_ft = play.index(", freethrow")
-
-    return {
-        'player': player,
-        'action': "free throw",
-        'success': " made" in play,
-        'number': int(play[index_ft + 12]),
-        'out of': int(play[index_ft + 15])
-    }
-
 
 # Below are functions dedicated to cleaning and preprocessing parsed
 # play-by-play logs from a game and fixing irregularities.
@@ -1620,10 +1734,10 @@ def correct_minutes(boxes, plays):
         plays: The parsed list of plays in the game, as a list of dicts.
         boxes: The parsed list of boxes in the game, as a list of dicts."""
     # make dicts of player name -> time played for each team
-    h_minutes = dict([[player['name'], player['time played']] for player in boxes
-                             if (player['name'] != "Team") and not player['is away']])
-    a_minutes = dict([[player['name'], player['time played']] for player in boxes
-                             if (player['name'] != "Team") and player['is away']])
+    h_minutes = {player['name']: player['time played'] for player in boxes
+                 if (player['name'] != "Team") and not player['is away']}
+    a_minutes = {player['name']: player['time played'] for player in boxes
+                 if (player['name'] != "Team") and player['is away']}
 
     # calculate the playing time inferred from play-by-play compared to the box score
     last_time = 1200
