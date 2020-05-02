@@ -840,7 +840,41 @@ def parse_all_plays(raw_plays):
 
 
 def parse_play_row(play_row):
-    """Put all the information in the row into a dict that contains parsed play information."""
+    """From a list representing a row of play-by-play data, extracts the
+    information about the play that occurred and returns it as a dict.
+
+    Args:
+        play_row: A row of play-by-play data as a list in the format:
+        [period (first half = 0, second half = 1, 1st overtime = 2,
+            2nd overtime = 3, etc),
+        time remaining in the format MM:SS:cc, MM:SS, or M:SS,
+        away team play,
+        score formatted like "46-41" with away team first,
+        home team play]
+
+    Returns:
+        None if the play could not be parsed or was the start or end of a
+        period. Otherwise, returns a dict of the play information with the keys
+        and values:
+        'period': The period in which the play occurred.
+        'time': The time remaining in the period at the time of the play, in
+            seconds.
+        'home score': The home team's score after the play.
+        'away score': The away team's score after the play.
+        'is away': True if the action was done by the away team, False
+            otherwise.
+        'player': The player who did the action in the play.
+        'action': The action performed in the play. (e.g., "shot")
+        'flag 1': The type of that action, if applicable. (e.g., "layup")
+        'flag 2': The length of the shot, if the play was a shot. Otherwise
+            this field is not included
+        'flag 3': Whether the shot went in, the player was subbed in, or the
+            rebound was offensive, depending on the action. Not included if it
+            does not apply to the action.
+        'flag 4': Whether the shot was a second-chance shot, or whether the
+            rebound was a deadball rebound, if applicable.
+        'flag 5': Whether the shot was in in transition, if applicable.
+        'flag 6': Whether the shot was blocked, if applicable."""
     play_1 = play_row[2]
     play_2 = play_row[4]
     score = play_row[3]
@@ -859,12 +893,11 @@ def parse_play_row(play_row):
             return None
 
         scores = clean_score(score)
-        parsed_play['home score'] = scores[1]
-        parsed_play['away score'] = scores[0]
+        parsed_play['home score'] = scores['home']
+        parsed_play['away score'] = scores['away']
         parsed_play['time'] = clean_centi_time(play_row[1])
 
         # get other information from the row
-        parsed_play['game ID'] = play_row[0]
         parsed_play['period'] = int(play_row[0])
         parsed_play['is away'] = is_away
 
