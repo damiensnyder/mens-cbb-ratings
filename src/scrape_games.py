@@ -875,7 +875,24 @@ def parse_play(play):
     """Parse the text of a play and return the information about it.
 
     Args:
-        play: The text of the play, as written."""
+        play: The text of the play, as written.
+
+    Returns:
+        None if the play could not be parsed or was the start or end of a
+        period. Otherwise, returns a dict of the play information with the keys
+        and values:
+        'player': The player who did the action in the play.
+        'action': The action performed in the play. (e.g., "shot")
+        'flag 1': The type of that action, if applicable. (e.g., "layup")
+        'flag 2': The length of the shot, if the play was a shot. Otherwise
+            this field is not included
+        'flag 3': Whether the shot went in, the player was subbed in, or the
+            rebound was offensive, depending on the action. Not included if it
+            does not apply to the action.
+        'flag 4': Whether the shot was a second-chance shot, or whether the
+            rebound was a deadball rebound, if applicable.
+        'flag 5': Whether the shot was in in transition, if applicable.
+        'flag 6': Whether the shot was blocked, if applicable."""
     notation_info = get_notation_style(play)
     if notation_info is None:
         return None
