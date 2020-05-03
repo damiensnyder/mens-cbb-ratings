@@ -1091,12 +1091,15 @@ def clean_score(score):
         If the score can't be identified, returns a dict with the same keys and
         None for both values."""
     if (type(score) == str) and ("-" in score):
-        return {
-            'home': int(score[score.index("-") + 1:]),
-            'away': int(score[:score.index("-")])
-        }
-    else:
-        return {'home': None, 'away': None}
+        try:
+            return {
+                'home': int(score[score.index("-") + 1:]),
+                'away': int(score[:score.index("-")])
+            }
+        except ValueError:
+            pass    # return None for both teams if score is an invalid string.
+
+    return {'home': None, 'away': None}
 
 
 # Below are functions dedicated to parsing plays in the 'caps' notation format.

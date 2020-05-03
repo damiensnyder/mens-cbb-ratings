@@ -196,19 +196,9 @@ def test_score_name_similarity():
 
 def test_clean_raw_play_data():
     """Runs all tests of functions for parsing play-by-play data."""
-    test_clean_centi_time()
     test_parse_play()
-
-
-def test_clean_centi_time():
-    """Tests relevant cases of clean_centi_time."""
-    assert sg.clean_centi_time('11:12') == 672
-    assert sg.clean_centi_time('01:12') == 72
-    assert sg.clean_centi_time('01:02') == 62
-    assert sg.clean_centi_time('01:12:63') == 72.63
-    assert sg.clean_centi_time('00:12:63') == 12.63
-    assert sg.clean_centi_time('00:02:63') == 2.63
-    assert sg.clean_centi_time('00:02:03') == 2.03
+    test_clean_centi_time()
+    test_clean_score()
 
 
 def test_parse_play():
@@ -223,6 +213,32 @@ def test_parse_play():
                 print(f"Assertion error in parsing play. Play: '{play}'")
                 print("Correct value: " + str(plays[play]))
                 print("Received value: " + str(sg.parse_play(play)))
+
+
+def test_clean_centi_time():
+    """Tests relevant cases of clean_centi_time."""
+    assert sg.clean_centi_time('11:12') == 672
+    assert sg.clean_centi_time('01:12') == 72
+    assert sg.clean_centi_time('01:02') == 62
+    assert sg.clean_centi_time('01:12:63') == 72.63
+    assert sg.clean_centi_time('00:12:63') == 12.63
+    assert sg.clean_centi_time('00:02:63') == 2.63
+    assert sg.clean_centi_time('00:02:03') == 2.03
+
+
+def test_clean_score():
+    """Tests relevant cases of clean_score."""
+    assert sg.clean_score("gu723oiy") == {'home': None, 'away': None}
+    assert sg.clean_score("") == {'home': None, 'away': None}
+    assert sg.clean_score(3) == {'home': None, 'away': None}
+    assert sg.clean_score(None) == {'home': None, 'away': None}
+    assert sg.clean_score("46-41") == {'home': 41, 'away': 46}
+    assert sg.clean_score("101-81") == {'home': 81, 'away': 101}
+    assert sg.clean_score("81-101") == {'home': 101, 'away': 81}
+    assert sg.clean_score("101-102") == {'home': 102, 'away': 101}
+    assert sg.clean_score("4-10") == {'home': 10, 'away': 4}
+    assert sg.clean_score("10-4") == {'home': 4, 'away': 10}
+    assert sg.clean_score("AA-BB") == {'home': None, 'away': None}
 
 
 # Main method. Runs all functions that run tests.
