@@ -172,12 +172,14 @@ def scrape_game(scraper, cursor, season, box_id, by_pbp=False):
         location = find_location(box_soup)
         attendance = find_attendance(box_soup)
         referees = find_referees(box_soup)
-        h_team_season_id, a_team_season_id, h_school_id, a_school_id = find_team_ids(box_soup)
+        h_team_season_id, a_team_season_id, h_school_id, a_school_id \
+            = find_team_ids(box_soup)
         h_name, a_name, is_exhibition = find_names_and_exhibition(box_soup)
         h_roster = fetch_roster(cursor, h_team_season_id, h_school_id, season)
         a_roster = fetch_roster(cursor, a_team_season_id, a_school_id, season)
-        upload_game(cursor, pbp_id, h_team_season_id, a_team_season_id, h_name, a_name, game_time,
-                    location, attendance, referees, is_exhibition)
+        upload_game(cursor, pbp_id, h_team_season_id, a_team_season_id, h_name,
+                    a_name, game_time, location, attendance, referees,
+                    is_exhibition)
 
         raw_boxes = find_raw_boxes(box_soup)
         boxes = clean_raw_boxes(raw_boxes, h_roster, a_roster)
@@ -185,7 +187,7 @@ def scrape_game(scraper, cursor, season, box_id, by_pbp=False):
 
         pbp_soup = scrape_plays(scraper, pbp_id)
         if pbp_soup is not None:
-            raw_plays = find_raw_plays(pbp_soup, pbp_id)
+            raw_plays = find_raw_plays(pbp_soup)
             plays = parse_all_plays(raw_plays)
             track_shot_clock(plays)
             track_partic(plays)
@@ -564,13 +566,13 @@ def clean_single_box(raw_box, roster):
     if raw_box[2].lower() == "team":
         box['name'] = "Team"
         box['player ID'] = None
-        raw_box['position'] = None
+        box['position'] = None
         box['time played'] = None
     else:
         player = identify_player(raw_box[0], clean_name(raw_box[2]), roster)
         box['player ID'] = player['player ID']
         box['name'] = player['name']
-        raw_box['position'] = clean_position(raw_box[3])
+        box['position'] = clean_position(raw_box[3])
         box['time played'] = clean_time(raw_box[5])
 
     box['FGM'] = clean_stat(raw_box[6])
@@ -587,7 +589,7 @@ def clean_single_box(raw_box, roster):
     box['BLK'] = clean_stat(raw_box[19])
     box['PF'] = clean_stat(raw_box[20])
 
-    return raw_box
+    return box
 
 
 def clean_name(name):
@@ -627,9 +629,10 @@ def clean_name(name):
 
 
 def identify_player(player_id, name, roster):
-    """Given the name and player ID of a player, and the roster of the team they play on, identify
-    the player. Look for an exact match, otherwise choose the player with the most similar name. If
-    no matching or even similar player can be found, return a player with the given name and a
+    """Given the name and player ID of a player, and the roster of the team
+    they play on, identify the player. Look for an exact match, otherwise
+    choose the player with the most similar name. If no matching or even
+    similar player can be found, return a player with the given name and a
     player ID of None.
 
     Args:
@@ -653,11 +656,11 @@ def identify_player(player_id, name, roster):
     # if there is an exactly matching name or player ID, return that player, or otherwise
     # choose the player with the most similar name
     for player in roster:
-        if (player_id == player['player_id']) or (name == player['name']):
+        if (player_id == player['player ID']) or (name == player['name']):
             most_similar = player
             break
         else:
-            similarity = score_name_similarity(name, player[1])
+            similarity = score_name_similarity(name, player['name'])
             if similarity > highest_similarity:
                 highest_similarity = similarity
                 most_similar = player

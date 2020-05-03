@@ -9,11 +9,38 @@ PATH_SCOREBOARD_HTML_VALUES = "../tests/test_cases/scoreboard_html_values.json"
 PATH_PARSED_PLAY_VALUES = "../tests/test_cases/parsed_play_values.json"
 PATH_ROSTER_VALUES = "../tests/test_cases/roster_values.json"
 
+# Integration tests
+
+
+def test_integration():
+    test_scrape_game()
+
+
+def test_scrape_game():
+    conn = sg.connect_to_db()
+    cursor = conn.cursor()
+    box_file = open('../tests/webpages/box_1602674.html', 'r')
+    box_soup = bs4.BeautifulSoup(box_file, 'html.parser')
+    pbp_id = sg.find_pbp_id(box_soup)
+    game_time = sg.find_game_time(box_soup)
+    location = sg.find_location(box_soup)
+    attendance = sg.find_attendance(box_soup)
+    referees = sg.find_referees(box_soup)
+    h_team_season_id, a_team_season_id, h_school_id, a_school_id \
+        = sg.find_team_ids(box_soup)
+    h_name, a_name, is_exhibition = sg.find_names_and_exhibition(box_soup)
+    h_roster = sg.fetch_roster(cursor, h_team_season_id, h_school_id, 2019)
+    a_roster = sg.fetch_roster(cursor, a_team_season_id, a_school_id, 2019)
+
+    raw_boxes = sg.find_raw_boxes(box_soup)
+    boxes = sg.clean_raw_boxes(raw_boxes, h_roster, a_roster)
+    print(boxes)
+
 
 # Test cases for functions that clean stats.ncaa.org scoreboard pages.
 
 
-def test_clean_scoraboard():
+def test_clean_scoreboard():
     """Opens the JSON file with the dates and desired outputs for the test
     cases and runs all tests for each date."""
     with open(PATH_SCOREBOARD_HTML_VALUES, 'r') as correct_scoreboard_file:
@@ -259,11 +286,13 @@ def test_clean_score():
 
 
 def main():
-    test_clean_scoraboard()
+    test_clean_scoreboard()
     test_clean_box_score()
     test_db_interaction()
     test_clean_raw_box_data()
     test_clean_raw_play_data()
+    test_integration()
+
 
 
 if __name__ == '__main__':
