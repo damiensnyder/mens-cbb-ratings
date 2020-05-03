@@ -21,6 +21,7 @@ def test_scrape_game():
     cursor = conn.cursor()
     box_file = open('../tests/webpages/box_1602674.html', 'r')
     box_soup = bs4.BeautifulSoup(box_file, 'html.parser')
+
     pbp_id = sg.find_pbp_id(box_soup)
     game_time = sg.find_game_time(box_soup)
     location = sg.find_location(box_soup)
@@ -34,7 +35,15 @@ def test_scrape_game():
 
     raw_boxes = sg.find_raw_boxes(box_soup)
     boxes = sg.clean_raw_boxes(raw_boxes, h_roster, a_roster)
-    print(boxes)
+
+    pbp_file = open('../tests/webpages/pbp_4654374.html', 'r')
+    pbp_soup = bs4.BeautifulSoup(pbp_file, 'html.parser')
+
+    raw_plays = sg.find_raw_plays(pbp_soup)
+    plays = sg.parse_all_plays(raw_plays, h_roster, a_roster)
+    sg.track_shot_clock(plays)
+    sg.track_partic(plays)
+    sg.correct_minutes(boxes, plays)
 
 
 # Test cases for functions that clean stats.ncaa.org scoreboard pages.

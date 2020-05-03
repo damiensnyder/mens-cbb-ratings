@@ -188,7 +188,7 @@ def scrape_game(scraper, cursor, season, box_id, by_pbp=False):
         pbp_soup = scrape_plays(scraper, pbp_id)
         if pbp_soup is not None:
             raw_plays = find_raw_plays(pbp_soup)
-            plays = parse_all_plays(raw_plays)
+            plays = parse_all_plays(raw_plays, h_roster, a_roster)
             track_shot_clock(plays)
             track_partic(plays)
             correct_minutes(boxes, plays)
@@ -874,11 +874,13 @@ def upload_plays(cursor, game_id, plays):
 # Below are functions for parsing a play from the play-by-play logs.
 
 
-def parse_all_plays(raw_plays):
+def parse_all_plays(raw_plays, h_roster, a_roster):
     """Parses all plays in the game that can be parsed.
 
     Args:
-        raw_plays: A list of the raw play rows of the paly-by-play log.
+        raw_plays: A list of the raw play rows of the play-by-play log.
+        h_roster: The home team's roster, as a list of dicts.
+        a_roster: The away team's roster, as a list of dicts.
 
     Returns:
         All the plays that could be parsed, as a list of dicts of parsed
@@ -886,7 +888,7 @@ def parse_all_plays(raw_plays):
     plays = []
     for play_row in raw_plays:
         try:
-            play = parse_play_row(play_row)
+            play = parse_play_row(play_row, h_roster, a_roster)
             if play is not None:
                 plays.append(play)
         except ValueError:
@@ -894,18 +896,20 @@ def parse_all_plays(raw_plays):
     return plays
 
 
-def parse_play_row(play_row):
+def parse_play_row(play_row, h_roster, a_roster):
     """From a list representing a row of play-by-play data, extracts the
     information about the play that occurred and returns it as a dict.
 
     Args:
         play_row: A row of play-by-play data as a list in the format:
-        [period (first half = 0, second half = 1, 1st overtime = 2,
-            2nd overtime = 3, etc),
-        time remaining in the format MM:SS:cc, MM:SS, or M:SS,
-        away team play,
-        score formatted like "46-41" with away team first,
-        home team play]
+            [period (first half = 0, second half = 1, 1st overtime = 2,
+                2nd overtime = 3, etc),
+            time remaining in the format MM:SS:cc, MM:SS, or M:SS,
+            away team play,
+            score formatted like "46-41" with away team first,
+            home team play]
+        h_roster: The home team's roster, as a list of dicts.
+        a_roster: The away team's roster, as a list of dicts.
 
     Returns:
         None if the play could not be parsed or was the start or end of a
@@ -948,6 +952,14 @@ def parse_play_row(play_row):
             return None
 
         scores = clean_score(score)
+        if is_away:
+            parsed_play['player'] = identify_player(None,
+                                                    parsed_play['player'],
+                                                    a_roster)
+        else:
+            parsed_play['player'] = identify_player(None,
+                                                    parsed_play['player'],
+                                                    h_roster)
         parsed_play['home score'] = scores['home']
         parsed_play['away score'] = scores['away']
         parsed_play['time'] = clean_centi_time(play_row[1])
