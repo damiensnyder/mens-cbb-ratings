@@ -223,8 +223,8 @@ def test_clean_stat():
 
 
 def test_score_name_similarity():
-    assert sg.score_name_similarity("F L", "First Last") == 8
-    assert sg.score_name_similarity("First Last", "F L") == 8
+    assert sg.score_name_similarity("F L", "First Last") == 4
+    assert sg.score_name_similarity("First Last", "F L") == 4
     assert sg.score_name_similarity("First Last", "F D") == -7
     assert sg.score_name_similarity("First Last", "Firs Last") == 9
     assert sg.score_name_similarity("First Last", "First Last") == 16

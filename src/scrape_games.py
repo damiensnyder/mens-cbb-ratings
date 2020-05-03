@@ -668,6 +668,27 @@ def identify_player(player_id, name, roster):
     return most_similar
 
 
+def score_name_similarity(name1, name2):
+    """Evaluate the similarity of two names. Similarity is measured as twice number of matching
+    3-character sequences (ignoring punctuation and case) minus absolute difference in length."""
+    name1 = name1.lower().replace('.', '')
+    name2 = name2.lower().replace('.', '')
+
+    similarity = -abs(len(name1) - len(name2))
+    for i in range(len(name1) - 2):
+        if name1[i:i + 3] in name2:
+            similarity += 2
+
+    # if either name is only initials, assign a score of 4 if the names have the same initials
+    if (len(name1) == 3) or (len(name2) == 3):
+        index_space1 = name1.index(" ")
+        index_space2 = name2.index(" ")
+        if (name1[0] == name2[0]) and (name1[index_space1 + 1] == name2[index_space2 + 1]):
+            return 4
+
+    return similarity
+
+
 def clean_position(raw_position):
     """Convert messy representations (or lack thereof) of positions to single
     characters representing them.
@@ -720,27 +741,6 @@ def clean_stat(raw_stat):
         return int(raw_stat)
     except ValueError:
         return 0
-
-
-def score_name_similarity(name1, name2):
-    """Evaluate the similarity of two names. Similarity is measured as twice number of matching
-    3-character sequences (ignoring punctuation and case) minus absolute difference in length."""
-    name1 = name1.lower().replace('.', '')
-    name2 = name2.lower().replace('.', '')
-
-    similarity = -abs(len(name1) - len(name2))
-    for i in range(len(name1) - 2):
-        if name1[i:i + 3] in name2:
-            similarity += 2
-
-    # if either name is only initials, assign a score of 8 if the names have the same initials
-    if (len(name1) == 3) or (len(name2) == 3):
-        index_space1 = name1.index(" ")
-        index_space2 = name2.index(" ")
-        if (name1[0] == name2[0]) and (name1[index_space1 + 1] == name2[index_space2 + 1]):
-            return 8
-
-    return similarity
 
 
 # Below are functions for interacting with the database.
@@ -1746,7 +1746,7 @@ def track_shot_clock(plays, max_shot_clock=30, orb_to_20=True):
         if play['action'] in CLOCK_RESETTING_ACTIONS:
             shot_clock_end = max(play['time'] - max_shot_clock, 0)
         elif play['action'] == "rebound":
-            if play['offensive'] and orb_to_20:
+            if play['flag 3'] and orb_to_20:
                 shot_clock_end = max(play['time'] - 20, 0)
             else:
                 shot_clock_end = max(play['time'] - max_shot_clock, 0)
@@ -1796,7 +1796,7 @@ def track_partic(plays):
         # no need to change participation if no player did this action
         if (player != "Floor") and (player != "Team"):
             if not play['is away']:
-                subbed_in = (play['action'] == "substitution") and play['in']
+                subbed_in = (play['action'] == "substitution") and play['flag 3']
                 if ((player not in last_h_partic) or subbed_in) and (player not in h_partic):
                     h_partic.append(player)
 
@@ -1816,10 +1816,10 @@ def track_partic(plays):
                     backfilled.append(player)
 
                 # remove them from the list if they were substituted out
-                if (play['action'] == "substitution") and not play['in'] and (player in h_partic):
+                if (play['action'] == "substitution") and not play['flag 3'] and (player in h_partic):
                     h_partic.remove(player)
             else:
-                subbed_in = (play['action'] == "substitution") and play['in']
+                subbed_in = (play['action'] == "substitution") and play['flag 3']
                 if ((player not in last_a_partic) or subbed_in) and (player not in a_partic):
                     a_partic.append(player)
 
@@ -1839,7 +1839,7 @@ def track_partic(plays):
                     backfilled.append(player)
 
                 # remove them from the list if they were substituted out
-                if (play['action'] == "substitution") and not play['in'] and (player in a_partic):
+                if (play['action'] == "substitution") and not play['flag 3'] and (player in a_partic):
                     a_partic.remove(player)
 
 
@@ -1873,9 +1873,9 @@ def correct_minutes(boxes, plays):
 
         try:
             for player in play['home partic']:
-                h_minutes[player] -= time_diff
+                h_minutes[player['name']] -= time_diff
             for player in play['away partic']:
-                a_minutes[player] -= time_diff
+                a_minutes[player['name']] -= time_diff
         except KeyError:
             pass
 
@@ -1885,8 +1885,8 @@ def correct_minutes(boxes, plays):
     # add or remove players who are logged as playing too many or too few minutes if more or fewer
     # than 5 people are on the court for each team
     for play in plays:
-        h_partic = play['home partic']
-        a_partic = play['away partic']
+        h_partic = [player['name'] for player in play['home partic']]
+        a_partic = [player['name'] for player in play['away partic']]
         if play['period'] == last_period:
             time_diff = last_time - int(play['time'])
         else:
@@ -1895,56 +1895,64 @@ def correct_minutes(boxes, plays):
         last_time = int(play['time'])
         last_period = play['period']
 
-        # add the players with the most extra minutes to partic1 if there are less than 5
+        # add the players with the most extra minutes to partic1 if there
+        # are less than 5
         while len(h_partic) < 5:
             max_player = None
             max_minutes = None
 
             for player in h_minutes:
                 if (player not in h_partic) \
-                        and ((h_minutes[player] > max_minutes) or max_minutes is None):
+                        and ((max_minutes is None)
+                             or (h_minutes[player] > max_minutes)):
                     max_player = player
                     max_minutes = h_minutes[player]
 
             h_partic.append(max_player)
             h_minutes[max_player] -= time_diff
 
-        # add the players with the most extra minutes to partic2 if there are less than 5
+        # add the players with the most extra minutes to partic2 if there
+        # are less than 5
         while len(a_partic) < 5:
             max_player = None
             max_minutes = None
 
             for player in a_minutes:
                 if (player not in a_partic) \
-                        and ((a_minutes[player] > max_minutes) or max_minutes is None):
+                        and ((max_minutes is None)
+                             or (a_minutes[player] > max_minutes)):
                     max_player = player
                     max_minutes = a_minutes[player]
 
             a_partic.append(max_player)
             a_minutes[max_player] -= time_diff
 
-        # remove the players with the most extra plays from partic1 if there are more than 5
+        # remove the players with the most extra plays from partic1 if there
+        # are more than 5
         while len(h_partic) < 5:
             min_player = None
             min_minutes = None
 
             for player in h_minutes:
                 if (player in h_partic) \
-                        and ((h_minutes[player] < min_minutes) or min_minutes is None):
+                        and ((min_minutes is None)
+                             or (h_minutes[player] > min_minutes)):
                     min_player = player
                     min_minutes = h_minutes[player]
 
             h_partic.remove(min_player)
             h_minutes[min_player] += time_diff
 
-        # remove the players with the most extra plays from partic2 if there are more than 5
+        # remove the players with the most extra plays from partic2 if there
+        # are more than 5
         while len(a_partic) < 5:
             min_player = None
             min_minutes = None
 
             for player in a_minutes:
                 if (player in a_partic) \
-                        and ((a_minutes[player] < min_minutes) or min_minutes is None):
+                        and ((min_minutes is None)
+                             or (a_minutes[player] > min_minutes)):
                     min_player = player
                     min_minutes = a_minutes[player]
 
