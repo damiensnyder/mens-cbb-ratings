@@ -27,15 +27,18 @@ CLOCK_RESETTING_ACTIONS = ["jump ball", "possession arrow", "shot", "turnover", 
                            "foul committed", "free throw"]
 
 PATH_DATABASE_INFO = "../src/db_info.txt"
-UPLOAD_GAME_QUERY = "INSERT INTO games (game_id, h_team_season_id, a_team_season_id, h_name," \
-                    "a_name, start_time, location, attendance, referee1, referee2, referee3," \
-                    "is_exhibition) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);"
+UPLOAD_GAME_QUERY = ("INSERT INTO games (game_id, h_team_season_id,"
+                     "a_team_season_id, h_name, a_name, start_time, location,"
+                     "attendance, referee1, referee2, referee3,"
+                     "is_exhibition) VALUES (%s, %s, %s, %s, %s, %s, %s, %s,"
+                     "%s, %s, %s, %s);")
 NULLABLE_BOX_FIELDS = ["player ID", "name", "is away", "position", "time played", "FGM", "FGA",
                        "3PM", "3PA", "FTM", "FTA", "ORB", "DRB", "AST", "TOV", "STL", "BLK", "PF"]
-UPLOAD_BOX_QUERY = "INSERT INTO boxes (game_id, box_in_game, player_id, player_name, is_away," \
-                   "position, time_played, fgm, fga, 3pm, 3pa, ftm, fta, orb, drb, ast, tov, stl" \
-                   "blk, pf) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s," \
-                   "%s, %s, %s, %s, %s);"
+UPLOAD_BOX_QUERY = ("INSERT INTO boxes (game_id, box_in_game, player_id,"
+                    "player_name, is_away, position, time_played, fgm, fga,"
+                    "3pm, 3pa, ftm, fta, orb, drb, ast, tov, stl, blk, pf) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,"
+                    "%s, %s, %s, %s, %s, %s, %s, %s);")
 NULLABLE_PLAY_FIELDS = ["period", "time", "shot clock", "home score", "away score", "is away",
                         "action", "flag 1", "flag 2", "flag 3", "flag 4", "flag 5", "flag 6"]
 UPLOAD_PLAY_QUERY = ("INSERT INTO plays (game_id, play_in_game, period,"
@@ -49,11 +52,11 @@ UPLOAD_PLAY_QUERY = ("INSERT INTO plays (game_id, play_in_game, period,"
                      "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,"
                      "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,"
                      "%s, %s, %s, %s, %s, %s")
-FETCH_TEAM_SEASON_ID_QUERY = ("SELECT (team_season_id) FROM team_seasons WHERE"
+FETCH_TEAM_SEASON_ID_QUERY = ("SELECT team_season_id FROM team_seasons WHERE "
                               "school_id = %s AND season_year = %s")
 FETCH_DIVISION_CODE_QUERY = "SELECT division_code FROM seasons WHERE year = %s"
-FETCH_ROSTER_QUERY = "SELECT (player_id, player_name) FROM player_seasons WHERE team_season_id =" \
-                     "%s"
+FETCH_ROSTER_QUERY = ("SELECT player_id, player_name FROM player_seasons "
+                      "WHERE team_season_id = %s")
 
 
 # Below are functions for scraping game information from stats.ncaa.org.

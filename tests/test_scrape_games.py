@@ -7,6 +7,7 @@ import src.scrape_games as sg
 PATH_BOX_HTML_VALUES = "../tests/test_cases/box_html_values.json"
 PATH_SCOREBOARD_HTML_VALUES = "../tests/test_cases/scoreboard_html_values.json"
 PATH_PARSED_PLAY_VALUES = "../tests/test_cases/parsed_play_values.json"
+PATH_ROSTER_VALUES = "../tests/test_cases/roster_values.json"
 
 
 # Test cases for functions that clean stats.ncaa.org scoreboard pages.
@@ -18,7 +19,7 @@ def test_clean_scoraboard():
     with open(PATH_SCOREBOARD_HTML_VALUES, 'r') as correct_scoreboard_file:
         dates = json.load(correct_scoreboard_file)
         for date in dates:
-            with open(f'webpages/scoreboard_{date}.html', 'r')\
+            with open(f'webpages/scoreboard_{date}.html', 'r') \
                     as scoreboard_html_file:
                 soup = bs4.BeautifulSoup(scoreboard_html_file, 'html.parser')
                 test_find_box_ids(soup, dates[date]['box IDs'])
@@ -92,6 +93,7 @@ def test_db_interaction():
     conn = test_connect_to_db()
     cursor = conn.cursor()
     test_fetch_division_code(cursor)
+    test_fetch_roster(cursor)
 
 
 def test_connect_to_db():
@@ -102,6 +104,18 @@ def test_connect_to_db():
 
 def test_fetch_division_code(cursor):
     assert sg.fetch_division_code(cursor, 2019) == 16700
+
+
+def test_fetch_roster(cursor):
+    with open(PATH_ROSTER_VALUES, 'r') as correct_roster_file:
+        rosters = json.load(correct_roster_file)
+        for roster_id in rosters:
+            roster = rosters[roster_id]
+            found_roster = sg.fetch_roster(cursor,
+                                           roster['team season ID'],
+                                           roster['school ID'],
+                                           roster['year'])
+            assert found_roster == roster['players']
 
 
 # Test cases for functions that to clean the raw data extracted from
