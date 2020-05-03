@@ -1687,12 +1687,12 @@ def parse_semicolon_three_pointer(play, player):
     return {
         'player': player,
         'action': "shot",
-        'success': " made" in play,
-        'length': "3",
-        'type': shot_type,
-        'second chance': "2ndchance" in play,
-        'fast break': "fastbreak" in play,
-        'blocked': "blocked" in play
+        'flag 1': shot_type,
+        'flag 2': "3",
+        'flag 3': " made" in play,
+        'flag 4': "2ndchance" in play,
+        'flag 5': "fastbreak" in play,
+        'flag 6': "blocked" in play
     }
 
 
