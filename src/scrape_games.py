@@ -1876,12 +1876,18 @@ def get_time_discrepancies(boxes, plays):
         if player['name'] != "Team":
             if player['is away']:
                 a_minutes[player['name']] = {
-                    'player': player,
+                    'player': {
+                        'player ID': player['player ID'],
+                        'name': player['name']
+                    },
                     'discrepancy': player['time played']
                 }
             else:
                 h_minutes[player['name']] = {
-                    'player': player,
+                    'player': {
+                        'player ID': player['player ID'],
+                        'name': player['name']
+                    },
                     'discrepancy': player['time played']
                 }
 
@@ -1940,7 +1946,8 @@ def correct_time_played(boxes, plays):
             max_player = None
             max_discrepancy = None
 
-            for player in h_minutes:
+            for player_name in h_minutes:
+                player = h_minutes[player_name]
                 if (player['player'] not in play['home partic']) \
                         and ((max_discrepancy is None)
                              or (player['discrepancy'] > max_discrepancy)):
@@ -1948,7 +1955,7 @@ def correct_time_played(boxes, plays):
                     max_discrepancy = player['discrepancy']
 
             play['home partic'].append(max_player)
-            player['discrepancy'] -= time_diff
+            h_minutes[max_player['name']]['discrepancy'] -= time_diff
 
         # add the players with the most extra minutes to partic2 if there
         # are less than 5
@@ -1956,7 +1963,8 @@ def correct_time_played(boxes, plays):
             max_player = None
             max_discrepancy = None
 
-            for player in a_minutes:
+            for player_name in a_minutes:
+                player = a_minutes[player_name]
                 if (player['player'] not in play['away partic']) \
                         and ((max_discrepancy is None)
                              or (player['discrepancy'] > max_discrepancy)):
@@ -1964,7 +1972,7 @@ def correct_time_played(boxes, plays):
                     max_discrepancy = player['discrepancy']
 
             play['away partic'].append(max_player)
-            player['discrepancy'] -= time_diff
+            a_minutes[max_player['name']]['discrepancy'] -= time_diff
 
         # remove the players with the most extra plays from partic1 if there
         # are more than 5
@@ -1972,7 +1980,8 @@ def correct_time_played(boxes, plays):
             min_player = None
             min_discrepancy = None
 
-            for player in h_minutes:
+            for player_name in h_minutes:
+                player = h_minutes[player_name]
                 if (player['player'] in play['home partic']) \
                         and ((min_discrepancy is None)
                              or (player['discrepancy'] < min_discrepancy)):
@@ -1980,7 +1989,7 @@ def correct_time_played(boxes, plays):
                     min_discrepancy = player['discrepancy']
 
             play['home partic'].remove(min_player)
-            player['discrepancy'] += time_diff
+            h_minutes[min_player['name']]['discrepancy'] += time_diff
 
         # remove the players with the most extra plays from partic2 if there
         # are more than 5
@@ -1988,7 +1997,8 @@ def correct_time_played(boxes, plays):
             min_player = None
             min_discrepancy = None
 
-            for player in a_minutes:
+            for player_name in a_minutes:
+                player = a_minutes[player_name]
                 if (player['player'] in play['away partic']) \
                         and ((min_discrepancy is None)
                              or (player['discrepancy'] < min_discrepancy)):
@@ -1996,7 +2006,7 @@ def correct_time_played(boxes, plays):
                     min_discrepancy = player['discrepancy']
 
             play['away partic'].remove(min_player)
-            player['discrepancy'] += time_diff
+            a_minutes[min_player['name']]['discrepancy'] += time_diff
 
 
 # Main method. Going to be entirely rewritten eventually.
