@@ -7,7 +7,7 @@ import pymysql
 import src.scrape_util
 
 CRAWL_DELAY = 1
-VERBOSE = 3
+VERBOSE = 4
 MAX_RETRIES = 15
 DEFAULT_THREAD_COUNT = 25
 
@@ -35,7 +35,7 @@ UPLOAD_GAME_QUERY = ("INSERT INTO games (game_id, h_team_season_id,"
 NULLABLE_BOX_FIELDS = ["player ID", "name", "is away", "position", "time played", "FGM", "FGA",
                        "3PM", "3PA", "FTM", "FTA", "ORB", "DRB", "AST", "TOV", "STL", "BLK", "PF"]
 UPLOAD_BOX_QUERY = ("INSERT INTO boxes (game_id, box_in_game, player_id,"
-                    "player_name, is_away, position, time_played, fgm, fga,"
+                    "player_name, is_away, position, seconds_played, fgm, fga,"
                     "3pm, 3pa, ftm, fta, orb, drb, ast, tov, stl, blk, pf) "
                     "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,"
                     "%s, %s, %s, %s, %s, %s, %s, %s);")
@@ -51,7 +51,7 @@ UPLOAD_PLAY_QUERY = ("INSERT INTO plays (game_id, play_in_game, period,"
                      "a_p4_name, a_p5_id, a_p5_name) VALUES (%s, %s, %s, %s,"
                      "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,"
                      "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,"
-                     "%s, %s, %s, %s, %s, %s")
+                     "%s, %s, %s, %s, %s)")
 FETCH_TEAM_SEASON_ID_QUERY = ("SELECT team_season_id FROM team_seasons WHERE "
                               "school_id = %s AND season_year = %s")
 FETCH_DIVISION_CODE_QUERY = "SELECT division_code FROM seasons WHERE year = %s"
@@ -183,7 +183,7 @@ def scrape_game(scraper, cursor, season, box_id, by_pbp=False):
 
         raw_boxes = find_raw_boxes(box_soup)
         boxes = clean_raw_boxes(raw_boxes, h_roster, a_roster)
-        upload_boxes(cursor, boxes)
+        upload_boxes(cursor, pbp_id, boxes)
 
         pbp_soup = scrape_plays(scraper, pbp_id)
         if pbp_soup is not None:
@@ -191,7 +191,7 @@ def scrape_game(scraper, cursor, season, box_id, by_pbp=False):
             plays = parse_all_plays(raw_plays, h_roster, a_roster)
             track_shot_clock(plays)
             track_partic(plays)
-            correct_minutes(boxes, plays)
+            correct_time_played(boxes, plays)
             upload_plays(cursor, pbp_id, plays)
 
 
@@ -254,7 +254,7 @@ def scrape_plays(scraper, pbp_id):
             soup = scraper.last_soup
 
         try:
-            find_raw_plays(soup, pbp_id)  # janky bellwether for whether the soup is usable
+            find_raw_plays(soup)  # janky bellwether for whether the soup is usable
             return soup
         except AttributeError as e:
             scraper.log(f"Error parsing play-by-play: '{e}' (PBP ID: {pbp_id})")
@@ -789,7 +789,11 @@ def fetch_roster(cursor, team_season_id, school_id, year):
             return []   # return an empty list if the team is has no ID of either type
         else:
             cursor.execute(FETCH_TEAM_SEASON_ID_QUERY, (school_id, year))
-            team_season_id = cursor.fetchone()['team_season_id']
+            results = cursor.fetchone()
+            if results is None:
+                return []
+            else:
+                team_season_id = results[0]
     cursor.execute(FETCH_ROSTER_QUERY, (team_season_id,))
     raw_roster = cursor.fetchall()
     return [{'player ID': player[0], 'name': player[1]} for player in raw_roster]
@@ -823,26 +827,31 @@ def upload_game(cursor, game_id, h_team_season_id, a_team_season_id, h_name,
     game_tuple = (game_id, h_team_season_id, a_team_season_id, h_name, a_name,
                   start_time, location, attendance, referees[0], referees[1],
                   referees[2], is_exhibition)
-    cursor.execute(UPLOAD_GAME_QUERY, game_tuple)
+    try:
+        cursor.execute(UPLOAD_GAME_QUERY, game_tuple)
+    except pymysql.IntegrityError:
+        pass
 
 
-def upload_boxes(cursor, boxes):
+def upload_boxes(cursor, game_id, boxes):
     """Uploads the given box scores to the database.
 
     Args:
         cursor: The pymysql cursor object of the database connection.
+        game_id: The PBP ID of the game.
         boxes: The boxes in the game as a list of dicts."""
     i = 0   # tracks which box it is in the game
     for box in boxes:
-        if 'PBP id' not in box:
-            raise KeyError('Game ID not found.')
-        box_tuple = (box['PBP id'], i)
+        box_tuple = (game_id, i)
         for field in NULLABLE_BOX_FIELDS:
             if field not in box:
                 box[field] = None   # replace nullable fields with None
             box_tuple += (box[field],)
 
-        cursor.execute(UPLOAD_BOX_QUERY, box_tuple)
+        try:
+            cursor.execute(UPLOAD_BOX_QUERY, box_tuple)
+        except pymysql.IntegrityError:
+            pass
         i += 1
 
 
@@ -861,13 +870,20 @@ def upload_plays(cursor, game_id, plays):
                 play[field] = None
             play_tuple += (play[field],)
 
-        play_tuple += (play['agent']['player ID'], play['agent']['name'])
-        for player in play['h partic']:
+        play_tuple += (play['player']['player ID'], play['player']['name'])
+        for player in play['home partic']:
             play_tuple += (player['player ID'], player['name'])
-        for player in play['a partic']:
+        for player in play['away partic']:
             play_tuple += (player['player ID'], player['name'])
 
-        cursor.execute(UPLOAD_BOX_QUERY, play_tuple)
+        try:
+            cursor.execute(UPLOAD_PLAY_QUERY, play_tuple)
+        except pymysql.IntegrityError:
+            pass
+        except TypeError:
+            breakpoint()
+        except pymysql.InternalError:
+            breakpoint()
         i += 1
 
 
@@ -1794,7 +1810,7 @@ def track_partic(plays):
         play['away partic'] = last_a_partic
 
         # no need to change participation if no player did this action
-        if (player != "Floor") and (player != "Team"):
+        if (player['name'] != "Floor") and (player['name'] != "Team"):
             if not play['is away']:
                 subbed_in = (play['action'] == "substitution") and play['flag 3']
                 if ((player not in last_h_partic) or subbed_in) and (player not in h_partic):
@@ -1843,21 +1859,31 @@ def track_partic(plays):
                     a_partic.remove(player)
 
 
-def correct_minutes(boxes, plays):
-    """Fixes plays that don't have exactly 5 players listed as on the court for
-    each team by checking who is listed as playing more or fewer minutes in the
-    box score than is reflected in the play-by-play. Adds or removes players
-    from to the list of participating players on their teams for the plays it
-    is suspected they were misrecorded on. Each player is a dict.
+def get_time_discrepancies(boxes, plays):
+    """Finds the difference between the time each player is listed as playing
+    in the box score and the time implied by play-by-play data.
 
     Args:
         plays: The parsed list of plays in the game, as a list of dicts.
-        boxes: The parsed list of boxes in the game, as a list of dicts."""
-    # make dicts of player name -> time played for each team
-    h_minutes = {player['name']: player['time played'] for player in boxes
-                 if (player['name'] != "Team") and not player['is away']}
-    a_minutes = {player['name']: player['time played'] for player in boxes
-                 if (player['name'] != "Team") and player['is away']}
+        boxes: The parsed list of boxes in the game, as a list of dicts.
+
+    Returns:
+        A dict for each team from player name to player dict and time
+        discrepancy (keys 'player', 'disrepancy'). Home team first."""
+    h_minutes = dict()
+    a_minutes = dict()
+    for player in boxes:
+        if player['name'] != "Team":
+            if player['is away']:
+                a_minutes[player['name']] = {
+                    'player': player,
+                    'discrepancy': player['time played']
+                }
+            else:
+                h_minutes[player['name']] = {
+                    'player': player,
+                    'discrepancy': player['time played']
+                }
 
     # calculate the playing time inferred from play-by-play compared to the box score
     last_time = 1200
@@ -1873,11 +1899,26 @@ def correct_minutes(boxes, plays):
 
         try:
             for player in play['home partic']:
-                h_minutes[player['name']] -= time_diff
+                h_minutes[player['name']]['time played'] -= time_diff
             for player in play['away partic']:
-                a_minutes[player['name']] -= time_diff
+                a_minutes[player['name']]['time played'] -= time_diff
         except KeyError:
             pass
+
+    return h_minutes, a_minutes
+
+
+def correct_time_played(boxes, plays):
+    """Fixes plays that don't have exactly 5 players listed as on the court for
+    each team by checking who is listed as playing more or fewer minutes in the
+    box score than is reflected in the play-by-play. Adds or removes players
+    from to the list of participating players on their teams for the plays it
+    is suspected they were misrecorded on. Each player is a dict.
+
+    Args:
+        plays: The parsed list of plays in the game, as a list of dicts.
+        boxes: The parsed list of boxes in the game, as a list of dicts."""
+    h_minutes, a_minutes = get_time_discrepancies(boxes, plays)
 
     last_time = 1200
     last_period = 0
@@ -1885,8 +1926,6 @@ def correct_minutes(boxes, plays):
     # add or remove players who are logged as playing too many or too few minutes if more or fewer
     # than 5 people are on the court for each team
     for play in plays:
-        h_partic = [player['name'] for player in play['home partic']]
-        a_partic = [player['name'] for player in play['away partic']]
         if play['period'] == last_period:
             time_diff = last_time - int(play['time'])
         else:
@@ -1897,67 +1936,67 @@ def correct_minutes(boxes, plays):
 
         # add the players with the most extra minutes to partic1 if there
         # are less than 5
-        while len(h_partic) < 5:
+        while len(play['home partic']) < 5:
             max_player = None
-            max_minutes = None
+            max_discrepancy = None
 
             for player in h_minutes:
-                if (player not in h_partic) \
-                        and ((max_minutes is None)
-                             or (h_minutes[player] > max_minutes)):
-                    max_player = player
-                    max_minutes = h_minutes[player]
+                if (player['player'] not in play['home partic']) \
+                        and ((max_discrepancy is None)
+                             or (player['discrepancy'] > max_discrepancy)):
+                    max_player = player['player']
+                    max_discrepancy = player['discrepancy']
 
-            h_partic.append(max_player)
-            h_minutes[max_player] -= time_diff
+            play['home partic'].append(max_player)
+            player['discrepancy'] -= time_diff
 
         # add the players with the most extra minutes to partic2 if there
         # are less than 5
-        while len(a_partic) < 5:
+        while len(play['away partic']) < 5:
             max_player = None
-            max_minutes = None
+            max_discrepancy = None
 
             for player in a_minutes:
-                if (player not in a_partic) \
-                        and ((max_minutes is None)
-                             or (a_minutes[player] > max_minutes)):
-                    max_player = player
-                    max_minutes = a_minutes[player]
+                if (player['player'] not in play['away partic']) \
+                        and ((max_discrepancy is None)
+                             or (player['discrepancy'] > max_discrepancy)):
+                    max_player = player['player']
+                    max_discrepancy = player['discrepancy']
 
-            a_partic.append(max_player)
-            a_minutes[max_player] -= time_diff
+            play['away partic'].append(max_player)
+            player['discrepancy'] -= time_diff
 
         # remove the players with the most extra plays from partic1 if there
         # are more than 5
-        while len(h_partic) < 5:
+        while len(play['home partic']) > 5:
             min_player = None
-            min_minutes = None
+            min_discrepancy = None
 
             for player in h_minutes:
-                if (player in h_partic) \
-                        and ((min_minutes is None)
-                             or (h_minutes[player] > min_minutes)):
-                    min_player = player
-                    min_minutes = h_minutes[player]
+                if (player['player'] in play['home partic']) \
+                        and ((min_discrepancy is None)
+                             or (player['discrepancy'] < min_discrepancy)):
+                    min_player = player['player']
+                    min_discrepancy = player['discrepancy']
 
-            h_partic.remove(min_player)
-            h_minutes[min_player] += time_diff
+            play['home partic'].remove(min_player)
+            player['discrepancy'] += time_diff
 
         # remove the players with the most extra plays from partic2 if there
         # are more than 5
-        while len(a_partic) < 5:
+        while len(play['away partic']) > 5:
             min_player = None
-            min_minutes = None
+            min_discrepancy = None
 
             for player in a_minutes:
-                if (player in a_partic) \
-                        and ((min_minutes is None)
-                             or (a_minutes[player] > min_minutes)):
-                    min_player = player
-                    min_minutes = a_minutes[player]
+                if (player['player'] in play['away partic']) \
+                        and ((min_discrepancy is None)
+                             or (player['discrepancy'] < min_discrepancy)):
+                    min_player = player['player']
+                    min_discrepancy = player['discrepancy']
 
-            a_partic.remove(min_player)
-            a_minutes[min_player] += time_diff
+            play['away partic'].remove(min_player)
+            player['discrepancy'] += time_diff
 
 
 # Main method. Going to be entirely rewritten eventually.
@@ -1973,6 +2012,5 @@ def main(argv):
 
 
 if __name__ == '__main__':
-    # main([2017, 10, 30, 2018, 4, 7])
+    main([2018, 10, 24, 2018, 10, 25])
     # main(sys.argv[1:])
-    pass

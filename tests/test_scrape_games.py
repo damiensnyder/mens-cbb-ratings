@@ -43,7 +43,7 @@ def test_scrape_game():
     plays = sg.parse_all_plays(raw_plays, h_roster, a_roster)
     sg.track_shot_clock(plays)
     sg.track_partic(plays)
-    sg.correct_minutes(boxes, plays)
+    sg.correct_time_played(boxes, plays)
 
 
 # Test cases for functions that clean stats.ncaa.org scoreboard pages.
