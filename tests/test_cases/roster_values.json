@@ -1,65 +1,60 @@
 {
-  "450489": {
-    "team season ID": 450489,
-    "school ID": null,
-    "year": null,
-    "players": [
-      {
-        "player ID": 2080959,
-        "name": "Connor Harding"
-      },
-      {
-        "player ID": 1955909,
-        "name": "Dalton Nixon"
-      },
-      {
-        "player ID": 1955910,
-        "name": "Evan Troy"
-      },
-      {
-        "player ID": 2080935,
-        "name": "Gavin Baxter"
-      },
-      {
-        "player ID": 1735664,
-        "name": "Jahshire Hardnett"
-      },
-      {
-        "player ID": 2080957,
-        "name": "Kolby Lee"
-      },
-      {
-        "player ID": 1955911,
-        "name": "Luke Worthington"
-      },
-      {
-        "player ID": 1734091,
-        "name": "McKay Cannon"
-      },
-      {
-        "player ID": 1733566,
-        "name": "Nick Emery"
-      },
-      {
-        "player ID": 1955908,
-        "name": "Rylan Bergersen"
-      },
-      {
-        "player ID": 2080933,
-        "name": "Taylor Maughan"
-      },
-      {
-        "player ID": 1848351,
-        "name": "TJ Haws"
-      },
-      {
-        "player ID": 1848348,
-        "name": "Yoeli Childs"
-      },
-      {
-        "player ID": 1733568,
-        "name": "Zac Seljaas"
-      }
-    ]
-  }
+  "450489": [
+    {
+      "player ID": 2080959,
+      "name": "Connor Harding"
+    },
+    {
+      "player ID": 1955909,
+      "name": "Dalton Nixon"
+    },
+    {
+      "player ID": 1955910,
+      "name": "Evan Troy"
+    },
+    {
+      "player ID": 2080935,
+      "name": "Gavin Baxter"
+    },
+    {
+      "player ID": 1735664,
+      "name": "Jahshire Hardnett"
+    },
+    {
+      "player ID": 2080957,
+      "name": "Kolby Lee"
+    },
+    {
+      "player ID": 1955911,
+      "name": "Luke Worthington"
+    },
+    {
+      "player ID": 1734091,
+      "name": "McKay Cannon"
+    },
+    {
+      "player ID": 1733566,
+      "name": "Nick Emery"
+    },
+    {
+      "player ID": 1955908,
+      "name": "Rylan Bergersen"
+    },
+    {
+      "player ID": 2080933,
+      "name": "Taylor Maughan"
+    },
+    {
+      "player ID": 1848351,
+      "name": "TJ Haws"
+    },
+    {
+      "player ID": 1848348,
+      "name": "Yoeli Childs"
+    },
+    {
+      "player ID": 1733568,
+      "name": "Zac Seljaas"
+    }
+  ]
 }

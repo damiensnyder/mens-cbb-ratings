@@ -174,9 +174,17 @@ def scrape_game(scraper, cursor, season, box_id, by_pbp=False):
         referees = find_referees(box_soup)
         h_team_season_id, a_team_season_id, h_school_id, a_school_id \
             = find_team_ids(box_soup)
+        if h_team_season_id is None:
+            h_team_season_id = fetch_team_season_id(cursor,
+                                                    h_school_id,
+                                                    season)
+        if a_team_season_id is None:
+            a_team_season_id = fetch_team_season_id(cursor,
+                                                    a_school_id,
+                                                    season)
         h_name, a_name, is_exhibition = find_names_and_exhibition(box_soup)
-        h_roster = fetch_roster(cursor, h_team_season_id, h_school_id, season)
-        a_roster = fetch_roster(cursor, a_team_season_id, a_school_id, season)
+        h_roster = fetch_roster(cursor, h_team_season_id)
+        a_roster = fetch_roster(cursor, a_team_season_id)
         upload_game(cursor, pbp_id, h_team_season_id, a_team_season_id, h_name,
                     a_name, game_time, location, attendance, referees,
                     is_exhibition)
@@ -774,29 +782,45 @@ def fetch_division_code(cursor, year):
     return cursor.fetchone()[0]
 
 
-def fetch_roster(cursor, team_season_id, school_id, year):
+def fetch_team_season_id(cursor, school_id, season):
+    """Get the team season ID of the team with the specified school ID in the
+    given season.
+
+    Args:
+        cursor: The cursor of the pymysql database connection.
+        school_id: The school ID of the desired team season.
+        season: The year of the desired team season.
+
+    Returns:
+        The team season ID of the matching team season, if it exists."""
+    if school_id is None:
+        return None
+    else:
+        cursor.execute(FETCH_TEAM_SEASON_ID_QUERY, (school_id, season))
+        results = cursor.fetchone()
+        return results[0]
+
+
+def fetch_roster(cursor, team_season_id):
     """Get the player ID and name of each player on the team with the given
-    team season ID or the given school ID and year. Either team season ID or
-    (school ID and year) needs to be specified, but not both.
+    team season ID.
 
     Args:
         cursor: The cursor of the pymysql database connection.
         team_season_id: The team season ID of the desired team season.
-        school_id: The school ID of the desired team season.
-        year: The year of the desired team season."""
+
+    Returns:
+        The roster of the given team season as a list of dicts with keys
+        'player ID' and 'name']. If no roster could be found, returns an empty
+        list."""
     if team_season_id is None:
-        if school_id is None:
-            return []   # return an empty list if the team is has no ID of either type
-        else:
-            cursor.execute(FETCH_TEAM_SEASON_ID_QUERY, (school_id, year))
-            results = cursor.fetchone()
-            if results is None:
-                return []
-            else:
-                team_season_id = results[0]
+        return []
     cursor.execute(FETCH_ROSTER_QUERY, (team_season_id,))
     raw_roster = cursor.fetchall()
-    return [{'player ID': player[0], 'name': player[1]} for player in raw_roster]
+    return [{
+        'player ID': player[0],
+        'name': player[1]
+    } for player in raw_roster]
 
 
 def upload_game(cursor, game_id, h_team_season_id, a_team_season_id, h_name,

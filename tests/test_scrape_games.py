@@ -30,8 +30,8 @@ def test_scrape_game():
     h_team_season_id, a_team_season_id, h_school_id, a_school_id \
         = sg.find_team_ids(box_soup)
     h_name, a_name, is_exhibition = sg.find_names_and_exhibition(box_soup)
-    h_roster = sg.fetch_roster(cursor, h_team_season_id, h_school_id, 2019)
-    a_roster = sg.fetch_roster(cursor, a_team_season_id, a_school_id, 2019)
+    h_roster = sg.fetch_roster(cursor, h_team_season_id)
+    a_roster = sg.fetch_roster(cursor, a_team_season_id)
 
     raw_boxes = sg.find_raw_boxes(box_soup)
     boxes = sg.clean_raw_boxes(raw_boxes, h_roster, a_roster)
@@ -147,11 +147,8 @@ def test_fetch_roster(cursor):
         rosters = json.load(correct_roster_file)
         for roster_id in rosters:
             roster = rosters[roster_id]
-            found_roster = sg.fetch_roster(cursor,
-                                           roster['team season ID'],
-                                           roster['school ID'],
-                                           roster['year'])
-            assert found_roster == roster['players']
+            found_roster = sg.fetch_roster(cursor, roster_id)
+            assert found_roster == roster
 
 
 # Test cases for functions that to clean the raw data extracted from
@@ -300,7 +297,7 @@ def main():
     test_db_interaction()
     test_clean_raw_box_data()
     test_clean_raw_play_data()
-    test_integration()
+    # test_integration()
 
 
 
