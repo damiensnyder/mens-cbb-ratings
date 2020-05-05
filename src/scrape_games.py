@@ -798,7 +798,10 @@ def fetch_team_season_id(cursor, school_id, season):
     else:
         cursor.execute(FETCH_TEAM_SEASON_ID_QUERY, (school_id, season))
         results = cursor.fetchone()
-        return results[0]
+        if results is None:
+            return None
+        else:
+            return results[0]
 
 
 def fetch_roster(cursor, team_season_id):
