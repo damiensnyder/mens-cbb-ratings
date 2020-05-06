@@ -2048,10 +2048,7 @@ def correct_time_played(boxes, plays):
                     min_player = player['player']
                     min_discrepancy = player['discrepancy']
 
-            try:
-                play['away partic'].remove(min_player)
-            except ValueError:
-                print(play)
+            play['away partic'].remove(min_player)
             a_minutes[min_player['name']]['discrepancy'] += time_diff
 
 
@@ -2068,5 +2065,4 @@ def main(argv):
 
 
 if __name__ == '__main__':
-    main([2018, 12, 6, 2019, 1, 1])
-    # main(sys.argv[1:])
+    main(sys.argv[1:])
