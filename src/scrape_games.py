@@ -134,7 +134,11 @@ def scrape_box_ids(scraper, year, month, day, season_code):
         year: The year of the date of games to scrape.
         month: The month of the date of games to scrape.
         day: The day of the date of games to scrape.
-        season_code: The stats.ncaa.org code of the season."""
+        season_code: The stats.ncaa.org code of the season.
+
+    Returns:
+        The list of box IDs from the games on that date. If the scoreboard
+        could not be found, returns None instead."""
     retries_left = MAX_RETRIES
     while retries_left > 0:
         # open the page
@@ -154,7 +158,7 @@ def scrape_box_ids(scraper, year, month, day, season_code):
             retries_left -= 1
             if retries_left <= 0:
                 scraper.log(f"Done retrying. (Date: {month}/{day}/{year})", 0)
-                return None
+                return []
         time.sleep(CRAWL_DELAY)
 
 
@@ -2055,5 +2059,5 @@ def main(argv):
 
 
 if __name__ == '__main__':
-    main([2018, 10, 26, 2018, 11, 1])
+    main([2018, 11, 6, 2018, 11, 9])
     # main(sys.argv[1:])
