@@ -7,7 +7,7 @@ import pymysql
 import src.scrape_util
 
 CRAWL_DELAY = 1
-VERBOSE = 4
+VERBOSE = 3
 MAX_RETRIES = 15
 DEFAULT_THREAD_COUNT = 25
 
@@ -31,14 +31,16 @@ UPLOAD_GAME_QUERY = ("INSERT INTO games (game_id, h_team_season_id,"
                      "a_team_season_id, h_name, a_name, start_time, location,"
                      "attendance, referee1, referee2, referee3,"
                      "is_exhibition) VALUES (%s, %s, %s, %s, %s, %s, %s, %s,"
-                     "%s, %s, %s, %s);")
+                     "%s, %s, %s, %s) ON DUPLICATE KEY UPDATE "
+                     "game_id = game_id;")
 NULLABLE_BOX_FIELDS = ["player ID", "name", "is away", "position", "time played", "FGM", "FGA",
                        "3PM", "3PA", "FTM", "FTA", "ORB", "DRB", "AST", "TOV", "STL", "BLK", "PF"]
 UPLOAD_BOX_QUERY = ("INSERT INTO boxes (game_id, box_in_game, player_id,"
                     "player_name, is_away, position, seconds_played, fgm, fga,"
                     "3pm, 3pa, ftm, fta, orb, drb, ast, tov, stl, blk, pf) "
                     "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,"
-                    "%s, %s, %s, %s, %s, %s, %s, %s);")
+                    "%s, %s, %s, %s, %s, %s, %s, %s) ON DUPLICATE KEY UPDATE "
+                    "game_id = game_id;")
 NULLABLE_PLAY_FIELDS = ["period", "time", "shot clock", "home score", "away score", "is away",
                         "action", "flag 1", "flag 2", "flag 3", "flag 4", "flag 5", "flag 6"]
 UPLOAD_PLAY_QUERY = ("INSERT INTO plays (game_id, play_in_game, period,"
@@ -51,7 +53,8 @@ UPLOAD_PLAY_QUERY = ("INSERT INTO plays (game_id, play_in_game, period,"
                      "a_p4_name, a_p5_id, a_p5_name) VALUES (%s, %s, %s, %s,"
                      "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,"
                      "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,"
-                     "%s, %s, %s, %s, %s)")
+                     "%s, %s, %s, %s, %s) ON DUPLICATE KEY UPDATE "
+                     "game_id = game_id;")
 FETCH_TEAM_SEASON_ID_QUERY = ("SELECT team_season_id FROM team_seasons WHERE "
                               "school_id = %s AND season_year = %s")
 FETCH_DIVISION_CODE_QUERY = "SELECT division_code FROM seasons WHERE year = %s"
@@ -361,16 +364,19 @@ def find_attendance(soup):
         soup: A bs4.BeautifulSoup object of a stats.ncaa.org box score webpage.
 
     Returns:
-        The attendance of the game."""
+        The attendance of the game, or None if it could not be found."""
     el_metadata = soup.find_all('table', attrs={'width': '50%', 'align': 'center'})[2]
 
     # location appears above attendance in games where it is listed, but it is not listed for all
     # games
-    if 'Location:' in el_metadata.get_text():
-        el_attendance = el_metadata.find_all('tr')[2].find_all('td')[1]
-    else:
-        el_attendance = el_metadata.find_all('tr')[1].find_all('td')[1]
-    return int(el_attendance.get_text().strip().replace(',', ''))
+    try:
+        if 'Location:' in el_metadata.get_text():
+            el_attendance = el_metadata.find_all('tr')[2].find_all('td')[1]
+        else:
+            el_attendance = el_metadata.find_all('tr')[1].find_all('td')[1]
+        return int(el_attendance.get_text().strip().replace(',', ''))
+    except IndexError:
+        return None     # if attendance is not listed, return None
 
 
 def find_referees(soup):
@@ -2049,5 +2055,5 @@ def main(argv):
 
 
 if __name__ == '__main__':
-    main([2018, 10, 24, 2018, 10, 25])
+    main([2018, 10, 26, 2018, 11, 1])
     # main(sys.argv[1:])
