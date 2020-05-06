@@ -687,12 +687,14 @@ def identify_player(player_id, name, roster):
 
 
 def score_name_similarity(name1, name2):
-    """Evaluate the similarity of two names. Similarity is measured as twice number of matching
-    3-character sequences (ignoring punctuation and case) minus absolute difference in length."""
+    """Evaluate the similarity of two names. Similarity is measured as twice
+    the number of matching 3-character sequences (ignoring punctuation and
+    case) minus absolute difference in length. Length difference penalty is
+    capped at -6"""
     name1 = name1.lower().replace('.', '')
     name2 = name2.lower().replace('.', '')
 
-    similarity = -abs(len(name1) - len(name2))
+    similarity = max(-abs(len(name1) - len(name2)), -6)
     for i in range(len(name1) - 2):
         if name1[i:i + 3] in name2:
             similarity += 2
@@ -1088,9 +1090,13 @@ def get_notation_style(play):
     # is a caps play, and the play begins just after at the first space before
     # that lowercase letter.
     if index_first_lower > 6:
-        is_caps = "caps"
+        is_caps = True
         index_name_end = play[:index_first_lower].rfind(" ") + 1
-        player = (play[index_comma1 + 1:index_name_end] + play[0:index_comma1]).title()
+        if index_comma1 >= 0:
+            player = (play[index_comma1 + 1:index_name_end]
+                      + play[0:index_comma1]).title()
+        else:
+            player = play[:index_name_end - 1].title()
         play = play[index_name_end:].lower()
 
     # if the play is not identified as caps but starts with "TEAM", "null", or
@@ -1098,7 +1104,7 @@ def get_notation_style(play):
     elif (play[0:4] == "TEAM") \
             or (play[0:4] == "null") \
             or (play[0:4] == "team"):
-        is_caps = "caps"
+        is_caps = True
         player = "Team"
         index_name_end = 5
 
@@ -2042,7 +2048,10 @@ def correct_time_played(boxes, plays):
                     min_player = player['player']
                     min_discrepancy = player['discrepancy']
 
-            play['away partic'].remove(min_player)
+            try:
+                play['away partic'].remove(min_player)
+            except ValueError:
+                print(play)
             a_minutes[min_player['name']]['discrepancy'] += time_diff
 
 
@@ -2059,5 +2068,5 @@ def main(argv):
 
 
 if __name__ == '__main__':
-    main([2018, 11, 6, 2018, 11, 9])
+    main([2018, 12, 6, 2019, 1, 1])
     # main(sys.argv[1:])
