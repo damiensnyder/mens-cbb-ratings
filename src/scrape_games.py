@@ -1,10 +1,11 @@
 import time
 import datetime
 import re
+import sys
 
 import pymysql
 
-import src.scrape_util
+import scrape_util
 
 CRAWL_DELAY = 1
 VERBOSE = 3
@@ -26,7 +27,7 @@ YEAR_DIVISIONS = [
 CLOCK_RESETTING_ACTIONS = ["jump ball", "possession arrow", "shot", "turnover", "steal",
                            "foul committed", "free throw"]
 
-PATH_DATABASE_INFO = "../src/db_info.txt"
+PATH_DATABASE_INFO = "src/db_info.txt"
 UPLOAD_GAME_QUERY = ("INSERT INTO games (game_id, h_team_season_id,"
                      "a_team_season_id, h_name, a_name, start_time, location,"
                      "attendance, referee1, referee2, referee3,"
@@ -77,7 +78,7 @@ def scrape_range(start_year, start_month, start_day, end_year, end_month,
         end_year: The year of the last date of games to scrape, exclusive.
         end_month: The month of the last date of games to scrape, exclusive.
         end_day: The day of the last date of games to scrape, exclusive."""
-    scraper = src.scrape_util.Scraper(thread_count=DEFAULT_THREAD_COUNT,
+    scraper = scrape_util.Scraper(thread_count=DEFAULT_THREAD_COUNT,
                                       verbose=VERBOSE)
     conn = connect_to_db()
     cursor = conn.cursor()
